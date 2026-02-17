@@ -37,9 +37,13 @@ bash build.sh
 open HollywoodSaver.app
 ```
 
-### Add Videos
+### Add Videos From Github
 
 Download the included `hollywood.mp4` from the [Releases](https://github.com/davidtkeane/HollywoodSaver/releases) page, or add your own videos:
+
+## Video From Mega Storage
+
+**[Download hollywood.mp4 (140 MB)](https://mega.nz/file/qA1ATAjb#S3QLQOd6Mte46Z-j-HUu86iguSS_lMDUijeVXhwKCeo)** — Demo screensaver video hosted on MEGA
 
 1. Drop any `.mp4`, `.mov`, `.m4v`, or `.gif` files into the `HollywoodSaver` folder (next to the `.app`)
 2. Click the menu bar icon — your videos appear automatically

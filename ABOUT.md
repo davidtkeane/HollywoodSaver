@@ -21,7 +21,7 @@ Built with Swift in a single file. No bloat. No frameworks. Just pure macOS good
 **TryHackMe:** [rangersmyth](https://tryhackme.com/p/rangersmyth) (Top 8%)
 
 **About David:**
-- 🎓 Cybersecurity Master's student (Year 1) at University of Galway
+- 🎓 Cybersecurity Master's student (Year 1) at NCI Dublin.
 - 🧠 Applied Psychology BSc — Understanding humans makes better security
 - 🎖️ Combat medic mindset: *assess, adapt, protect*
 - 🏆 Battlefield tactician: Top 0.04% BF2 globally
