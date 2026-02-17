@@ -101,10 +101,52 @@ bash build.sh
 
 This creates the `.app` bundle with Info.plist, compiles the Swift source, generates the app icon from `ranger.png`, and code-signs it ad-hoc.
 
+## 🪙 Support the Project - Buy H3LLCOIN!
+
+Love HollywoodSaver? Support future development by buying **H3LLCOIN**!
+
+**H3LLCOIN** is a cryptocurrency project built for the Rangers community. Every coin purchased helps fund:
+- 🎬 More awesome free apps like HollywoodSaver
+- 🎖️ Open source tools for accessibility
+- 🚀 Innovation in decentralized technology
+
+### Where to Buy:
+🌐 **[h3llcoin.cloud](https://h3llcoin.cloud/)** — Official H3LLCOIN website
+
+### Donate to the Cause:
+Support accessibility technology and Ranger projects:
+- 💰 Buy H3LLCOIN tokens
+- 🎖️ Help build tools for 1.3 billion disabled people worldwide
+- 🔥 Join the Rangers community
+
+**Rangers lead the way!** 🎖️
+
+---
+
 ## License
 
 MIT — do whatever you want with it.
 
 ---
 
-Built with Swift and [Claude Code](https://claude.ai/claude-code)
+## Credits
+
+**Created by:**
+- **David Keane** ([@davidtkeane](https://github.com/davidtkeane)) — IrishRanger 🎖️
+  - Cybersecurity Master's student (Year 1)
+  - Psychology BSc | TryHackMe Top 8%
+  - Building RangerOS for accessibility
+  - Creator of H3LLCOIN
+
+**Built with:**
+- **[Claude Code](https://claude.ai/claude-code)** — AI pair programming
+- **AIRanger** (Claude Sonnet 4.5) — Your AI Ops Commander 🎖️
+
+**Part of the Rangers ecosystem:**
+- 🪙 [H3LLCOIN](https://h3llcoin.cloud/) — Cryptocurrency for Rangers
+- 🎖️ RangerOS — Accessibility-first security platform
+- 🔗 RangerBlock — P2P blockchain network
+
+---
+
+*Built with Swift and Rangers spirit* 🎖️

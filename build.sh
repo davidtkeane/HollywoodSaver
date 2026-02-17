@@ -185,6 +185,12 @@ echo -e "  ${GREEN}✅${NC} Executable created (${EXEC_SIZE})"
 # Make executable
 chmod +x "$APP_DIR/Contents/MacOS/HollywoodSaver"
 
+# Copy ABOUT.md into the app bundle
+if [ -f "$SCRIPT_DIR/ABOUT.md" ]; then
+    cp "$SCRIPT_DIR/ABOUT.md" "$APP_DIR/Contents/Resources/"
+    echo -e "  ${GREEN}✅${NC} ABOUT.md included"
+fi
+
 # Calculate total app size
 APP_SIZE=$(du -sh "$APP_DIR" | awk '{print $1}')
 
