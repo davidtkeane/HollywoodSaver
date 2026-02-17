@@ -1,0 +1,6 @@
+# Build output
+HollywoodSaver.app/
+*.iconset/
+
+# macOS
+.DS_Store
