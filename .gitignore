@@ -1,6 +1,7 @@
 # Build output
 HollywoodSaver.app/
 *.iconset/
+compress_gif.sh/
 
 # Large media files
 *.mp4
