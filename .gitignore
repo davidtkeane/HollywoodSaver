@@ -2,5 +2,11 @@
 HollywoodSaver.app/
 *.iconset/
 
+# Large media files
+*.mp4
+*.mov
+*.m4v
+*.gif
+
 # macOS
 .DS_Store
