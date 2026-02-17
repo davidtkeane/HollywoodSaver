@@ -1,5 +1,7 @@
 # HollywoodSaver
 
+![HollywoodSaver Demo](demo.gif)
+
 A native macOS menu bar app that turns your Mac into a video screensaver machine. Play looping videos and GIFs fullscreen — on your built-in display, external monitor, or both. Built with Swift in a single file, no Xcode project needed.
 
 ## Features
