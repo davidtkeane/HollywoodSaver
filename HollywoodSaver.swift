@@ -1402,7 +1402,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let posItem = NSMenuItem(title: "Position", action: nil, keyEquivalent: "")
         let posSubmenu = NSMenu(title: "Position")
-        for (label, value) in [("Top Right", "topRight"), ("Top Left", "topLeft")] {
+        for (label, value) in [("Top Right", "topRight"), ("Top Left", "topLeft"), ("Bottom Right", "bottomRight"), ("Bottom Left", "bottomLeft")] {
             let item = NSMenuItem(title: label, action: #selector(setCountdownPosition(_:)), keyEquivalent: "")
             item.representedObject = value as AnyObject
             item.state = Prefs.countdownPosition == value ? .on : .off
@@ -1767,10 +1767,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         for screen in targetScreens {
             let origin: NSPoint
-            if Prefs.countdownPosition == "topLeft" {
+            switch Prefs.countdownPosition {
+            case "topLeft":
                 origin = NSPoint(x: screen.frame.minX + padding,
                                  y: screen.frame.maxY - size.height - padding - menuBarHeight)
-            } else {
+            case "bottomRight":
+                origin = NSPoint(x: screen.frame.maxX - size.width - padding,
+                                 y: screen.frame.minY + padding)
+            case "bottomLeft":
+                origin = NSPoint(x: screen.frame.minX + padding,
+                                 y: screen.frame.minY + padding)
+            default: // topRight
                 origin = NSPoint(x: screen.frame.maxX - size.width - padding,
                                  y: screen.frame.maxY - size.height - padding - menuBarHeight)
             }
