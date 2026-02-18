@@ -906,7 +906,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "3.1.0"
+    static let appVersion = "3.2.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
