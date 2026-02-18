@@ -1311,19 +1311,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try chmod.run()
             chmod.waitUntilExit()
 
-            let terminalScript = """
-            tell application "Terminal"
-                activate
-                do script "bash '\(tempScript)'"
-            end tell
-            """
+            // Use open -a Terminal (no Automation permission needed)
+            let open = Process()
+            open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            open.arguments = ["-a", "Terminal", tempScript]
+            try open.run()
+            open.waitUntilExit()
 
-            let appleScript = NSAppleScript(source: terminalScript)
-            var errorDict: NSDictionary?
-            appleScript?.executeAndReturnError(&errorDict)
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                NSApp.terminate(nil)
+            if open.terminationStatus == 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    NSApp.terminate(nil)
+                }
+            } else {
+                let errorAlert = NSAlert()
+                errorAlert.messageText = "Update Failed"
+                errorAlert.informativeText = "Could not open Terminal.\n\nPlease update manually:\ncd \(appFolder) && git pull && bash build.sh"
+                errorAlert.alertStyle = .warning
+                errorAlert.runModal()
             }
         } catch {
             let errorAlert = NSAlert()

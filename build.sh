@@ -238,5 +238,9 @@ echo ""
 echo -e "${GREEN}Rangers lead the way!${NC}"
 echo ""
 
+# Clear version check cache so app does a fresh check on launch
+defaults delete com.rangersmyth.hollywoodsaver lastVersionCheckDate 2>/dev/null || true
+defaults delete com.rangersmyth.hollywoodsaver cachedLatestVersion 2>/dev/null || true
+
 # Auto-launch after build
 bash "$SCRIPT_DIR/run.sh"
