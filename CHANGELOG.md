@@ -12,6 +12,7 @@ All notable changes to HollywoodSaver are documented here.
 - **Countdown overlay size** — 3 sizes: Compact, Normal, Large
 - **Pomodoro mode** — auto-cycling work/break timer (configurable work 15-50 min, break 3-15 min)
 - **Session stats** — tracks breaks taken today and total, shown in Break Reminder menu
+- **Break Screen toggle** — disable fullscreen break overlay for countdown-only mode (sound + notification still fire)
 
 ### Changed
 - Version bumped to 3.4.0
