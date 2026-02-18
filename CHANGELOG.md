@@ -2,6 +2,21 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [3.0.0] - 2026-02-18
+
+### Added
+- **Break Reminder** — countdown timer with 60, 45, 30, and 15 minute presets
+- **Break screen overlay** — fullscreen "Take a Break, Ranger" screen with green glow effect
+- **Auto-dismiss** — break screen auto-dismisses after 30 seconds or click/Escape
+- **5-minute warning** — macOS notification 5 minutes before break time
+- **Countdown in menu** — live countdown (MM:SS remaining) visible when timer is active
+- **Cancel timer** — cancel any active break timer from the menu
+
+### Changed
+- Version bumped to 3.0.0
+
+---
+
 ## [2.4.0] - 2026-02-18
 
 ### Added

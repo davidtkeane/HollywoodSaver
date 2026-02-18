@@ -601,6 +601,12 @@ class Prefs {
         set { defaults.set(newValue, forKey: "matrixTrailLength") }
     }
 
+    // Break reminder
+    static var breakDuration: Int {
+        get { let v = defaults.integer(forKey: "breakDuration"); return v > 0 ? v : 60 }
+        set { defaults.set(newValue, forKey: "breakDuration") }
+    }
+
     // Version check cache
     static var lastVersionCheckDate: Double {
         get { defaults.double(forKey: "lastVersionCheckDate") }
@@ -641,6 +647,59 @@ class SliderMenuView: NSView {
     }
 }
 
+// MARK: - Break Reminder View
+
+class BreakReminderView: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        // Dark background
+        context.setFillColor(NSColor.black.withAlphaComponent(0.85).cgColor)
+        context.fill(bounds)
+
+        // Green glow circle
+        let centerX = bounds.midX
+        let centerY = bounds.midY + 40
+        let radius: CGFloat = 120
+        let glowColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.15)
+        for i in stride(from: radius * 2, through: radius, by: -10) {
+            context.setFillColor(glowColor.cgColor)
+            context.fillEllipse(in: CGRect(x: centerX - i, y: centerY - i, width: i * 2, height: i * 2))
+        }
+
+        // Main title
+        let titleFont = NSFont.systemFont(ofSize: 48, weight: .bold)
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: titleFont,
+            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
+        ]
+        let title = "Take a Break, Ranger"
+        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
+        (title as NSString).draw(at: NSPoint(x: centerX - titleSize.width / 2, y: centerY - titleSize.height / 2), withAttributes: titleAttrs)
+
+        // Subtitle
+        let subFont = NSFont.systemFont(ofSize: 22, weight: .medium)
+        let subAttrs: [NSAttributedString.Key: Any] = [
+            .font: subFont,
+            .foregroundColor: NSColor(calibratedRed: 0.7, green: 0.7, blue: 0.7, alpha: 1)
+        ]
+        let subtitle = "Step away from the screen for a few minutes"
+        let subSize = (subtitle as NSString).size(withAttributes: subAttrs)
+        (subtitle as NSString).draw(at: NSPoint(x: centerX - subSize.width / 2, y: centerY - titleSize.height / 2 - 50), withAttributes: subAttrs)
+
+        // Dismiss hint
+        let hintFont = NSFont.systemFont(ofSize: 14, weight: .regular)
+        let hintAttrs: [NSAttributedString.Key: Any] = [
+            .font: hintFont,
+            .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        ]
+        let hint = "Click anywhere or press Escape to dismiss  •  Auto-dismisses in 30 seconds"
+        let hintSize = (hint as NSString).size(withAttributes: hintAttrs)
+        (hint as NSString).draw(at: NSPoint(x: centerX - hintSize.width / 2, y: 60), withAttributes: hintAttrs)
+    }
+}
+
 // MARK: - App Delegate
 
 enum PlayMode {
@@ -650,7 +709,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "2.4.0"
+    static let appVersion = "3.0.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -662,6 +721,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var currentMode: PlayMode?
     var nowPlayingName: String?
     var latestVersion: String?
+    var breakTimer: Timer?
+    var breakEndDate: Date?
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1050,6 +1111,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = Prefs.launchAtLogin ? .on : .off
         menu.addItem(loginItem)
 
+        // Break Reminder
+        menu.addItem(NSMenuItem.separator())
+        let breakItem = NSMenuItem(title: "Break Reminder", action: nil, keyEquivalent: "")
+        let breakSubmenu = NSMenu(title: "Break Reminder")
+
+        if let endDate = breakEndDate {
+            let remaining = max(0, Int(endDate.timeIntervalSinceNow))
+            let mins = remaining / 60
+            let secs = remaining % 60
+            let countdownItem = NSMenuItem(title: String(format: "  %d:%02d remaining", mins, secs), action: nil, keyEquivalent: "")
+            countdownItem.isEnabled = false
+            breakSubmenu.addItem(countdownItem)
+            let cancelItem = NSMenuItem(title: "Cancel Timer", action: #selector(cancelBreakTimer), keyEquivalent: "")
+            breakSubmenu.addItem(cancelItem)
+        } else {
+            for minutes in [60, 45, 30, 15] {
+                let item = NSMenuItem(title: "Start \(minutes) min", action: #selector(startBreakTimer(_:)), keyEquivalent: "")
+                item.representedObject = minutes as AnyObject
+                breakSubmenu.addItem(item)
+            }
+        }
+
+        breakItem.submenu = breakSubmenu
+        menu.addItem(breakItem)
+
         // Contribute
         menu.addItem(NSMenuItem.separator())
         let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
@@ -1282,6 +1368,101 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func playMatrixRainAllScreens() {
         startPlaying(media: AppDelegate.matrixRainSentinel, on: NSScreen.screens, mode: .screensaver)
+    }
+
+    // MARK: - Break Reminder
+
+    @objc func startBreakTimer(_ sender: NSMenuItem) {
+        guard let minutes = sender.representedObject as? Int else { return }
+        breakTimer?.invalidate()
+        breakEndDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        Prefs.breakDuration = minutes
+
+        // Warning at 5 minutes remaining
+        if minutes > 5 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + TimeInterval((minutes - 5) * 60)) { [weak self] in
+                guard self?.breakEndDate != nil else { return }
+                self?.sendBreakNotification(title: "Break Reminder", body: "5 minutes until break time!")
+            }
+        }
+
+        // Timer fires every 60s to keep menu countdown fresh, and fires the break screen at end
+        breakTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
+            guard let self = self, let endDate = self.breakEndDate else {
+                timer.invalidate()
+                return
+            }
+            if Date() >= endDate {
+                timer.invalidate()
+                self.breakTimer = nil
+                self.breakEndDate = nil
+                self.showBreakScreen()
+            }
+        }
+    }
+
+    @objc func cancelBreakTimer() {
+        breakTimer?.invalidate()
+        breakTimer = nil
+        breakEndDate = nil
+    }
+
+    func sendBreakNotification(title: String, body: String) {
+        let notification = NSUserNotification()
+        notification.title = title
+        notification.informativeText = body
+        notification.soundName = NSUserNotificationDefaultSoundName
+        NSUserNotificationCenter.default.deliver(notification)
+    }
+
+    func showBreakScreen() {
+        // Play a sound notification too
+        sendBreakNotification(title: "Time for a Break!", body: "You've been working hard. Step away for a few minutes.")
+
+        // Create fullscreen break overlay on all screens
+        for screen in NSScreen.screens {
+            let window = ScreensaverWindow(
+                contentRect: screen.frame,
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .screenSaver
+            window.isOpaque = false
+            window.backgroundColor = NSColor.black.withAlphaComponent(0.85)
+            window.hasShadow = false
+            window.ignoresMouseEvents = false
+
+            // Create the break message view
+            let breakView = BreakReminderView(frame: screen.frame)
+            window.contentView = breakView
+
+            window.makeKeyAndOrderFront(nil)
+            screensaverWindows.append(window)
+        }
+
+        // Set up input monitoring to dismiss on click/key/mouse
+        if inputMonitor == nil {
+            inputMonitor = InputMonitor { [weak self] in
+                self?.dismissBreakScreen()
+            }
+        }
+
+        // Auto-dismiss after 30 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+            if !(self?.screensaverWindows.isEmpty ?? true) {
+                self?.dismissBreakScreen()
+            }
+        }
+    }
+
+    func dismissBreakScreen() {
+        for window in screensaverWindows {
+            window.orderOut(nil)
+        }
+        screensaverWindows.removeAll()
+        contentViews.removeAll()
+        inputMonitor = nil
     }
 
     // MARK: - Screen items submenu
