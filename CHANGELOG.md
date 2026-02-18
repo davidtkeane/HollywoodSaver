@@ -2,6 +2,22 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [2.4.0] - 2026-02-18
+
+### Added
+- **GitHub version checker** — app checks for newer versions on launch via GitHub tags API
+- **Version display in menu** — shows "HollywoodSaver v2.4.0" at top of menu dropdown
+- **Update notification** — orange "Update Available: v2.4.0 → v2.5.0" when a newer tag exists
+- **Update dialog** — NSAlert with Auto Update, Open GitHub, and Later buttons
+- **Auto-update** — backs up current .app, runs git pull + build.sh in Terminal, relaunches
+- **Dynamic version in build.sh** — reads version from Swift source, no more hardcoded Info.plist versions
+
+### Changed
+- Version is now single source of truth in `AppDelegate.appVersion`
+- build.sh success message shows version number
+
+---
+
 ## [2.3.0] - 2026-02-18
 
 ### Changed

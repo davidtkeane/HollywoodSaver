@@ -600,6 +600,16 @@ class Prefs {
         get { defaults.string(forKey: "matrixTrailLength") ?? "Medium" }
         set { defaults.set(newValue, forKey: "matrixTrailLength") }
     }
+
+    // Version check cache
+    static var lastVersionCheckDate: Double {
+        get { defaults.double(forKey: "lastVersionCheckDate") }
+        set { defaults.set(newValue, forKey: "lastVersionCheckDate") }
+    }
+    static var cachedLatestVersion: String? {
+        get { defaults.string(forKey: "cachedLatestVersion") }
+        set { defaults.set(newValue, forKey: "cachedLatestVersion") }
+    }
 }
 
 // MARK: - Slider Menu Item View
@@ -640,6 +650,8 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
+    static let appVersion = "2.4.0"
+    static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
     var screensaverWindows: [ScreensaverWindow] = []
@@ -649,6 +661,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var selectedMedia: String?
     var currentMode: PlayMode?
     var nowPlayingName: String?
+    var latestVersion: String?
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -758,6 +771,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem.menu = buildMenu()
 
+        // Check for updates in background
+        checkForUpdates()
+
         // Auto play on launch
         if Prefs.autoPlayEnabled, let filename = Prefs.lastMediaFilename {
             let mode: PlayMode = Prefs.lastPlayMode == "ambient" ? .ambient : .screensaver
@@ -803,6 +819,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.delegate = self
+
+        // Version info / Update available
+        if let latest = latestVersion, isNewerVersion(latest, than: AppDelegate.appVersion) {
+            let updateItem = NSMenuItem(
+                title: "Update Available: v\(AppDelegate.appVersion) → v\(latest)",
+                action: #selector(showUpdateDialog),
+                keyEquivalent: ""
+            )
+            updateItem.attributedTitle = NSAttributedString(
+                string: "Update Available: v\(AppDelegate.appVersion) → v\(latest)",
+                attributes: [.foregroundColor: NSColor.systemOrange]
+            )
+            menu.addItem(updateItem)
+            menu.addItem(NSMenuItem.separator())
+        } else {
+            let versionItem = NSMenuItem(
+                title: "HollywoodSaver v\(AppDelegate.appVersion)",
+                action: nil,
+                keyEquivalent: ""
+            )
+            versionItem.isEnabled = false
+            menu.addItem(versionItem)
+            menu.addItem(NSMenuItem.separator())
+        }
 
         // If ambient mode is active, show stop option at the top
         if currentMode == .ambient, let name = nowPlayingName {
@@ -1067,6 +1107,145 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openH3llcoin() {
         NSWorkspace.shared.open(URL(string: "https://h3llcoin.com/how-to-buy.html")!)
+    }
+
+    // MARK: - Version Checker
+
+    func checkForUpdates() {
+        let now = Date().timeIntervalSince1970
+        if now - Prefs.lastVersionCheckDate < 3600 {
+            latestVersion = Prefs.cachedLatestVersion
+            return
+        }
+
+        let urlString = "https://api.github.com/repos/\(AppDelegate.githubRepo)/tags"
+        guard let url = URL(string: urlString) else { return }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let data = data, error == nil else { return }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  let firstTag = json.first,
+                  let tagName = firstTag["name"] as? String else { return }
+
+            let remoteVersion = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+
+            DispatchQueue.main.async {
+                self?.latestVersion = remoteVersion
+                Prefs.cachedLatestVersion = remoteVersion
+                Prefs.lastVersionCheckDate = Date().timeIntervalSince1970
+            }
+        }.resume()
+    }
+
+    func isNewerVersion(_ remote: String, than local: String) -> Bool {
+        let remoteParts = remote.split(separator: ".").compactMap { Int($0) }
+        let localParts = local.split(separator: ".").compactMap { Int($0) }
+        let maxLen = max(remoteParts.count, localParts.count)
+        for i in 0..<maxLen {
+            let r = i < remoteParts.count ? remoteParts[i] : 0
+            let l = i < localParts.count ? localParts[i] : 0
+            if r > l { return true }
+            if r < l { return false }
+        }
+        return false
+    }
+
+    @objc func showUpdateDialog() {
+        let latest = latestVersion ?? "unknown"
+        let alert = NSAlert()
+        alert.messageText = "Update Available"
+        alert.informativeText = """
+        Current version: v\(AppDelegate.appVersion)
+        Latest version: v\(latest)
+
+        How to update:
+        1. Open Terminal in the HollywoodSaver folder
+        2. Run: git pull && bash build.sh
+        3. The app will restart automatically
+
+        Or click "Auto Update" to do this automatically.
+        """
+        alert.alertStyle = .informational
+
+        let gitDir = (appFolder as NSString).appendingPathComponent(".git")
+        let hasGit = FileManager.default.fileExists(atPath: gitDir)
+
+        if hasGit {
+            alert.addButton(withTitle: "Auto Update")
+        }
+        alert.addButton(withTitle: "Open GitHub")
+        alert.addButton(withTitle: "Later")
+
+        let response = alert.runModal()
+        if hasGit && response == .alertFirstButtonReturn {
+            performAutoUpdate()
+        } else if (!hasGit && response == .alertFirstButtonReturn) || (hasGit && response == .alertSecondButtonReturn) {
+            NSWorkspace.shared.open(URL(string: "https://github.com/\(AppDelegate.githubRepo)/releases")!)
+        }
+    }
+
+    @objc func performAutoUpdate() {
+        let currentVersion = AppDelegate.appVersion
+
+        let script = """
+        #!/bin/bash
+        set -e
+        cd "\(appFolder)"
+
+        # Backup current app
+        if [ -d "HollywoodSaver.app" ]; then
+            BACKUP_NAME="HollywoodSaver-v\(currentVersion).app"
+            if [ -d "$BACKUP_NAME" ]; then
+                rm -rf "$BACKUP_NAME"
+            fi
+            cp -R "HollywoodSaver.app" "$BACKUP_NAME"
+            echo "Backed up to $BACKUP_NAME"
+        fi
+
+        # Pull latest code
+        echo "Pulling latest code..."
+        git pull origin main
+
+        # Rebuild
+        echo "Rebuilding..."
+        bash build.sh
+        """
+
+        let tempScript = NSTemporaryDirectory() + "hollywoodsaver_update.sh"
+        do {
+            try script.write(toFile: tempScript, atomically: true, encoding: .utf8)
+
+            let chmod = Process()
+            chmod.executableURL = URL(fileURLWithPath: "/bin/chmod")
+            chmod.arguments = ["+x", tempScript]
+            try chmod.run()
+            chmod.waitUntilExit()
+
+            let terminalScript = """
+            tell application "Terminal"
+                activate
+                do script "bash '\(tempScript)'"
+            end tell
+            """
+
+            let appleScript = NSAppleScript(source: terminalScript)
+            var errorDict: NSDictionary?
+            appleScript?.executeAndReturnError(&errorDict)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                NSApp.terminate(nil)
+            }
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Update Failed"
+            errorAlert.informativeText = "Could not start the update process: \(error.localizedDescription)\n\nPlease update manually:\ncd \(appFolder) && git pull && bash build.sh"
+            errorAlert.alertStyle = .warning
+            errorAlert.runModal()
+        }
     }
 
     // MARK: - Matrix Rain settings actions

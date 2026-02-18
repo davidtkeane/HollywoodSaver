@@ -11,7 +11,14 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$SCRIPT_DIR/HollywoodSaver.app"
 
-echo -e "${BLUE}🎬 Building HollywoodSaver...${NC}"
+# Read version from Swift source (single source of truth)
+VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/HollywoodSaver.swift" | grep -o '"[^"]*"' | tr -d '"')
+if [ -z "$VERSION" ]; then
+    VERSION="2.2.0"
+    echo -e "${YELLOW}Warning: Could not read version from Swift source, using default ${VERSION}${NC}"
+fi
+
+echo -e "${BLUE}🎬 Building HollywoodSaver v${VERSION}...${NC}"
 echo ""
 
 # Detect Apple Silicon chip
@@ -71,7 +78,7 @@ mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
 # Write Info.plist
-cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
+cat > "$APP_DIR/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -86,9 +93,9 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSUIElement</key>
@@ -221,7 +228,7 @@ fi
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}🎖️  BUILD SUCCESSFUL!${NC}"
+echo -e "${GREEN}🎖️  BUILD SUCCESSFUL! (v${VERSION})${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${BLUE}App:${NC}       $APP_DIR"
