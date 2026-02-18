@@ -737,12 +737,77 @@ class BreakReminderView: NSView {
     }
 }
 
+// MARK: - Lock Overlay View
+
+class LockOverlayView: NSView {
+    let isPasswordScreen: Bool
+
+    init(frame: NSRect, isPasswordScreen: Bool) {
+        self.isPasswordScreen = isPasswordScreen
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        // Semi-transparent overlay (lets Matrix Rain show through)
+        context.setFillColor(NSColor.black.withAlphaComponent(0.65).cgColor)
+        context.fill(bounds)
+
+        // Green glow circle
+        let centerX = bounds.midX
+        let centerY = bounds.midY + 60
+        let radius: CGFloat = 100
+        let glowColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.12)
+        for i in stride(from: radius * 2, through: radius, by: -10) {
+            context.setFillColor(glowColor.cgColor)
+            context.fillEllipse(in: CGRect(x: centerX - i, y: centerY - i, width: i * 2, height: i * 2))
+        }
+
+        // Lock icon
+        let lockFont = NSFont.systemFont(ofSize: 64)
+        let lockAttrs: [NSAttributedString.Key: Any] = [
+            .font: lockFont,
+            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.8)
+        ]
+        let lockStr = "🔒"
+        let lockSize = (lockStr as NSString).size(withAttributes: lockAttrs)
+        (lockStr as NSString).draw(at: NSPoint(x: centerX - lockSize.width / 2, y: centerY - lockSize.height / 2 + 10), withAttributes: lockAttrs)
+
+        // Title
+        let titleFont = NSFont.systemFont(ofSize: 42, weight: .bold)
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: titleFont,
+            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
+        ]
+        let title = "Screen Locked"
+        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
+        (title as NSString).draw(at: NSPoint(x: centerX - titleSize.width / 2, y: centerY - titleSize.height / 2 - 50), withAttributes: titleAttrs)
+
+        if isPasswordScreen {
+            let hintFont = NSFont.systemFont(ofSize: 14, weight: .regular)
+            let hintAttrs: [NSAttributedString.Key: Any] = [
+                .font: hintFont,
+                .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+            ]
+            let hint = "Enter your password and press Return to unlock"
+            let hintSize = (hint as NSString).size(withAttributes: hintAttrs)
+            (hint as NSString).draw(at: NSPoint(x: centerX - hintSize.width / 2, y: 60), withAttributes: hintAttrs)
+        }
+    }
+}
+
 // MARK: - Lock Screen View
 
 class LockScreenView: NSView, NSTextFieldDelegate {
     var passwordField: NSSecureTextField?
     var errorLabel: NSTextField?
     var onUnlock: (() -> Void)?
+    var matrixRainView: MatrixRainView?
     let isPasswordScreen: Bool
 
     init(frame: NSRect, isPasswordScreen: Bool, onUnlock: @escaping () -> Void) {
@@ -750,6 +815,18 @@ class LockScreenView: NSView, NSTextFieldDelegate {
         self.onUnlock = onUnlock
         super.init(frame: frame)
         wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+
+        // Matrix Rain background
+        let rain = MatrixRainView(frame: bounds)
+        rain.autoresizingMask = [.width, .height]
+        addSubview(rain)
+        matrixRainView = rain
+
+        // Semi-transparent overlay with lock content
+        let overlay = LockOverlayView(frame: bounds, isPasswordScreen: isPasswordScreen)
+        overlay.autoresizingMask = [.width, .height]
+        addSubview(overlay)
 
         if isPasswordScreen {
             setupPasswordField()
@@ -805,55 +882,12 @@ class LockScreenView: NSView, NSTextFieldDelegate {
         field.layer?.add(animation, forKey: "shake")
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
+    func startMatrixRain() {
+        matrixRainView?.startPlayback()
+    }
 
-        // Dark background
-        context.setFillColor(NSColor.black.withAlphaComponent(0.92).cgColor)
-        context.fill(bounds)
-
-        // Green glow circle
-        let centerX = bounds.midX
-        let centerY = bounds.midY + 60
-        let radius: CGFloat = 100
-        let glowColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.12)
-        for i in stride(from: radius * 2, through: radius, by: -10) {
-            context.setFillColor(glowColor.cgColor)
-            context.fillEllipse(in: CGRect(x: centerX - i, y: centerY - i, width: i * 2, height: i * 2))
-        }
-
-        // Lock icon
-        let lockFont = NSFont.systemFont(ofSize: 64)
-        let lockAttrs: [NSAttributedString.Key: Any] = [
-            .font: lockFont,
-            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.8)
-        ]
-        let lockStr = "🔒"
-        let lockSize = (lockStr as NSString).size(withAttributes: lockAttrs)
-        (lockStr as NSString).draw(at: NSPoint(x: centerX - lockSize.width / 2, y: centerY - lockSize.height / 2 + 10), withAttributes: lockAttrs)
-
-        // Title
-        let titleFont = NSFont.systemFont(ofSize: 42, weight: .bold)
-        let titleAttrs: [NSAttributedString.Key: Any] = [
-            .font: titleFont,
-            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
-        ]
-        let title = "Screen Locked"
-        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
-        (title as NSString).draw(at: NSPoint(x: centerX - titleSize.width / 2, y: centerY - titleSize.height / 2 - 50), withAttributes: titleAttrs)
-
-        if isPasswordScreen {
-            // Hint text
-            let hintFont = NSFont.systemFont(ofSize: 14, weight: .regular)
-            let hintAttrs: [NSAttributedString.Key: Any] = [
-                .font: hintFont,
-                .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
-            ]
-            let hint = "Enter your password and press Return to unlock"
-            let hintSize = (hint as NSString).size(withAttributes: hintAttrs)
-            (hint as NSString).draw(at: NSPoint(x: centerX - hintSize.width / 2, y: 60), withAttributes: hintAttrs)
-        }
+    func stopMatrixRain() {
+        matrixRainView?.stopPlayback()
     }
 
     func focusPasswordField() {
@@ -1739,6 +1773,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.unlockScreen()
             }
             window.contentView = lockView
+            lockView.startMatrixRain()
 
             window.makeKeyAndOrderFront(nil)
             lockScreenWindows.append(window)
@@ -1757,6 +1792,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSCursor.unhide()
 
         for window in lockScreenWindows {
+            (window.contentView as? LockScreenView)?.stopMatrixRain()
             window.orderOut(nil)
         }
         lockScreenWindows.removeAll()

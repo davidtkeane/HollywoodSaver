@@ -10,6 +10,7 @@ All notable changes to HollywoodSaver are documented here.
 - **SHA-256 hashed password** — lock password stored securely with random salt (not plaintext)
 - **Multi-screen lock** — password field on primary screen, overlay on all screens
 - **Wrong password feedback** — shake animation + red error text on incorrect entry
+- **Matrix Rain lock screen** — lock screen background shows animated Matrix Rain behind a semi-transparent overlay
 - **Update notification** — system notification when a new version is detected (like a real app!)
 - **Periodic version check** — checks GitHub every hour automatically, not just on launch
 
