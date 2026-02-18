@@ -1071,6 +1071,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             )
             versionItem.isEnabled = false
             menu.addItem(versionItem)
+
+            let checkItem = NSMenuItem(title: "Check for Update", action: #selector(manualCheckForUpdate), keyEquivalent: "")
+            menu.addItem(checkItem)
             menu.addItem(NSMenuItem.separator())
         }
 
@@ -1388,6 +1391,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Version Checker
+
+    @objc func manualCheckForUpdate() {
+        checkForUpdates(forceRefresh: true)
+        // Show result after a short delay for the network request
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self = self else { return }
+            if let latest = self.latestVersion, self.isNewerVersion(latest, than: AppDelegate.appVersion) {
+                self.showUpdateDialog()
+            } else {
+                let alert = NSAlert()
+                alert.messageText = "You're Up to Date"
+                alert.informativeText = "HollywoodSaver v\(AppDelegate.appVersion) is the latest version."
+                alert.alertStyle = .informational
+                alert.runModal()
+            }
+        }
+    }
 
     func checkForUpdates(forceRefresh: Bool = false) {
         let now = Date().timeIntervalSince1970
