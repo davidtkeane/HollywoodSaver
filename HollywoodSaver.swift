@@ -615,6 +615,58 @@ class Prefs {
         get { defaults.string(forKey: "countdownPosition") ?? "topRight" }
         set { defaults.set(newValue, forKey: "countdownPosition") }
     }
+    static var countdownColor: String {
+        get { defaults.string(forKey: "countdownColor") ?? "Green" }
+        set { defaults.set(newValue, forKey: "countdownColor") }
+    }
+    static var countdownSize: String {
+        get { defaults.string(forKey: "countdownSize") ?? "Normal" }
+        set { defaults.set(newValue, forKey: "countdownSize") }
+    }
+    static var customPresets: [Int] {
+        get { defaults.array(forKey: "breakPresets") as? [Int] ?? [] }
+        set { defaults.set(newValue, forKey: "breakPresets") }
+    }
+    static var breakSoundEnabled: Bool {
+        get { defaults.object(forKey: "breakSoundEnabled") != nil ? defaults.bool(forKey: "breakSoundEnabled") : true }
+        set { defaults.set(newValue, forKey: "breakSoundEnabled") }
+    }
+    static var breakSoundName: String {
+        get { defaults.string(forKey: "breakSoundName") ?? "Glass" }
+        set { defaults.set(newValue, forKey: "breakSoundName") }
+    }
+    static var breakScreenEnabled: Bool {
+        get { defaults.object(forKey: "breakScreenEnabled") != nil ? defaults.bool(forKey: "breakScreenEnabled") : true }
+        set { defaults.set(newValue, forKey: "breakScreenEnabled") }
+    }
+    static var pomodoroWork: Int {
+        get { let v = defaults.integer(forKey: "pomodoroWork"); return v > 0 ? v : 25 }
+        set { defaults.set(newValue, forKey: "pomodoroWork") }
+    }
+    static var pomodoroBreak: Int {
+        get { let v = defaults.integer(forKey: "pomodoroBreak"); return v > 0 ? v : 5 }
+        set { defaults.set(newValue, forKey: "pomodoroBreak") }
+    }
+    static var breaksTakenToday: Int {
+        get {
+            let lastDate = defaults.string(forKey: "breakStatsDate") ?? ""
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let today = formatter.string(from: Date())
+            if lastDate != today { return 0 }
+            return defaults.integer(forKey: "breaksTakenToday")
+        }
+        set {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            defaults.set(formatter.string(from: Date()), forKey: "breakStatsDate")
+            defaults.set(newValue, forKey: "breaksTakenToday")
+        }
+    }
+    static var totalBreaksTaken: Int {
+        get { defaults.integer(forKey: "totalBreaksTaken") }
+        set { defaults.set(newValue, forKey: "totalBreaksTaken") }
+    }
 
     // Version check cache
     static var lastVersionCheckDate: Double {
@@ -911,35 +963,42 @@ class CountdownOverlayView: NSView {
     var timeLabel: NSTextField!
     var subtitleLabel: NSTextField!
 
-    override init(frame: NSRect) {
+    init(frame: NSRect, fontSize: CGFloat, color: NSColor) {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
         layer?.cornerRadius = 12
 
+        let subtitleSize: CGFloat = fontSize < 22 ? 9 : (fontSize > 30 ? 14 : 11)
+        let subtitleY = frame.height - subtitleSize - 6
+        let timeY: CGFloat = 2
+
         subtitleLabel = NSTextField(labelWithString: "Break in")
-        subtitleLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        subtitleLabel.font = NSFont.systemFont(ofSize: subtitleSize, weight: .medium)
         subtitleLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
         subtitleLabel.alignment = .center
-        subtitleLabel.frame = NSRect(x: 0, y: 28, width: frame.width, height: 16)
+        subtitleLabel.frame = NSRect(x: 0, y: subtitleY, width: frame.width, height: subtitleSize + 4)
         subtitleLabel.autoresizingMask = [.width]
         addSubview(subtitleLabel)
 
         timeLabel = NSTextField(labelWithString: "00:00")
-        timeLabel.font = NSFont(name: "Menlo", size: 26) ?? NSFont.monospacedSystemFont(ofSize: 26, weight: .bold)
-        timeLabel.textColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
+        timeLabel.font = NSFont(name: "Menlo", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
+        timeLabel.textColor = color
         timeLabel.alignment = .center
-        timeLabel.frame = NSRect(x: 0, y: 2, width: frame.width, height: 30)
+        timeLabel.frame = NSRect(x: 0, y: timeY, width: frame.width, height: fontSize + 4)
         timeLabel.autoresizingMask = [.width]
         addSubview(timeLabel)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func update(remaining: Int) {
+    func update(remaining: Int, subtitle: String? = nil) {
         let mins = remaining / 60
         let secs = remaining % 60
         timeLabel.stringValue = String(format: "%d:%02d", mins, secs)
+        if let subtitle = subtitle {
+            subtitleLabel.stringValue = subtitle
+        }
     }
 }
 
@@ -952,7 +1011,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "3.3.0"
+    static let appVersion = "3.4.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -970,6 +1029,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var lockScreenActive = false
     var versionCheckTimer: Timer?
     var countdownWindows: [NSWindow] = []
+    var pomodoroActive = false
+    var pomodoroOnBreak = false
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1369,13 +1430,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let breakItem = NSMenuItem(title: "Break Reminder", action: nil, keyEquivalent: "")
         let breakSubmenu = NSMenu(title: "Break Reminder")
 
+        // Session stats
+        let todayItem = NSMenuItem(title: "Today: \(Prefs.breaksTakenToday) break\(Prefs.breaksTakenToday == 1 ? "" : "s")", action: nil, keyEquivalent: "")
+        todayItem.isEnabled = false
+        breakSubmenu.addItem(todayItem)
+        let totalItem = NSMenuItem(title: "Total: \(Prefs.totalBreaksTaken) break\(Prefs.totalBreaksTaken == 1 ? "" : "s")", action: nil, keyEquivalent: "")
+        totalItem.isEnabled = false
+        breakSubmenu.addItem(totalItem)
+        breakSubmenu.addItem(NSMenuItem.separator())
+
         if let endDate = breakEndDate {
             let remaining = max(0, Int(endDate.timeIntervalSinceNow))
             let mins = remaining / 60
             let secs = remaining % 60
-            let countdownItem = NSMenuItem(title: String(format: "  %d:%02d remaining", mins, secs), action: nil, keyEquivalent: "")
+            let phase = pomodoroActive ? (pomodoroOnBreak ? "Break" : "Work") : "Break in"
+            let countdownItem = NSMenuItem(title: String(format: "  %@ %d:%02d", phase, mins, secs), action: nil, keyEquivalent: "")
             countdownItem.isEnabled = false
             breakSubmenu.addItem(countdownItem)
+            if pomodoroActive {
+                let stopItem = NSMenuItem(title: "Stop Pomodoro", action: #selector(stopPomodoro), keyEquivalent: "")
+                breakSubmenu.addItem(stopItem)
+            }
             let cancelItem = NSMenuItem(title: "Cancel Timer", action: #selector(cancelBreakTimer), keyEquivalent: "")
             breakSubmenu.addItem(cancelItem)
         } else {
@@ -1384,9 +1459,91 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 item.representedObject = minutes as AnyObject
                 breakSubmenu.addItem(item)
             }
+            let customItem = NSMenuItem(title: "Custom...", action: #selector(startCustomBreakTimer), keyEquivalent: "")
+            breakSubmenu.addItem(customItem)
+
+            // Custom presets
+            let presets = Prefs.customPresets
+            if !presets.isEmpty {
+                breakSubmenu.addItem(NSMenuItem.separator())
+                for mins in presets {
+                    let item = NSMenuItem(title: "Start \(mins) min \u{2605}", action: #selector(startBreakTimer(_:)), keyEquivalent: "")
+                    item.representedObject = mins as AnyObject
+                    breakSubmenu.addItem(item)
+                }
+            }
+
+            // Manage Presets
+            let presetsItem = NSMenuItem(title: "Presets", action: nil, keyEquivalent: "")
+            let presetsSubmenu = NSMenu(title: "Presets")
+            let saveItem = NSMenuItem(title: "Save Current (\(Prefs.breakDuration) min)", action: #selector(saveCurrentPreset), keyEquivalent: "")
+            presetsSubmenu.addItem(saveItem)
+            if !presets.isEmpty {
+                let clearItem = NSMenuItem(title: "Clear All Presets", action: #selector(clearPresets), keyEquivalent: "")
+                presetsSubmenu.addItem(clearItem)
+            }
+            presetsItem.submenu = presetsSubmenu
+            breakSubmenu.addItem(presetsItem)
         }
 
-        // Countdown display settings
+        // Pomodoro
+        breakSubmenu.addItem(NSMenuItem.separator())
+        let pomoItem = NSMenuItem(title: "Pomodoro", action: nil, keyEquivalent: "")
+        let pomoSubmenu = NSMenu(title: "Pomodoro")
+        if pomodoroActive {
+            let stopPomo = NSMenuItem(title: "Stop Pomodoro", action: #selector(stopPomodoro), keyEquivalent: "")
+            pomoSubmenu.addItem(stopPomo)
+        } else {
+            let startPomo = NSMenuItem(title: "Start Pomodoro", action: #selector(startPomodoro), keyEquivalent: "")
+            pomoSubmenu.addItem(startPomo)
+        }
+        pomoSubmenu.addItem(NSMenuItem.separator())
+        let workItem = NSMenuItem(title: "Work: \(Prefs.pomodoroWork) min", action: nil, keyEquivalent: "")
+        let workSubmenu = NSMenu(title: "Work Duration")
+        for mins in [15, 20, 25, 30, 45, 50] {
+            let item = NSMenuItem(title: "\(mins) min", action: #selector(setPomodoroWork(_:)), keyEquivalent: "")
+            item.representedObject = mins as AnyObject
+            item.state = Prefs.pomodoroWork == mins ? .on : .off
+            workSubmenu.addItem(item)
+        }
+        workItem.submenu = workSubmenu
+        pomoSubmenu.addItem(workItem)
+        let breakDurItem = NSMenuItem(title: "Break: \(Prefs.pomodoroBreak) min", action: nil, keyEquivalent: "")
+        let breakDurSubmenu = NSMenu(title: "Break Duration")
+        for mins in [3, 5, 10, 15] {
+            let item = NSMenuItem(title: "\(mins) min", action: #selector(setPomodoroBreak(_:)), keyEquivalent: "")
+            item.representedObject = mins as AnyObject
+            item.state = Prefs.pomodoroBreak == mins ? .on : .off
+            breakDurSubmenu.addItem(item)
+        }
+        breakDurItem.submenu = breakDurSubmenu
+        pomoSubmenu.addItem(breakDurItem)
+        pomoItem.submenu = pomoSubmenu
+        breakSubmenu.addItem(pomoItem)
+
+        // Sound settings
+        breakSubmenu.addItem(NSMenuItem.separator())
+        let breakSoundItem = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
+        let breakSoundSubmenu = NSMenu(title: "Sound")
+        let enabledItem = NSMenuItem(title: "Enabled", action: #selector(toggleBreakSound), keyEquivalent: "")
+        enabledItem.state = Prefs.breakSoundEnabled ? .on : .off
+        breakSoundSubmenu.addItem(enabledItem)
+        breakSoundSubmenu.addItem(NSMenuItem.separator())
+        for name in ["Glass", "Hero", "Ping", "Pop", "Purr", "Submarine"] {
+            let item = NSMenuItem(title: name, action: #selector(setBreakSound(_:)), keyEquivalent: "")
+            item.representedObject = name as AnyObject
+            item.state = Prefs.breakSoundName == name ? .on : .off
+            item.isEnabled = Prefs.breakSoundEnabled
+            breakSoundSubmenu.addItem(item)
+        }
+        breakSoundItem.submenu = breakSoundSubmenu
+        breakSubmenu.addItem(breakSoundItem)
+
+        let breakScreenItem = NSMenuItem(title: "Break Screen", action: #selector(toggleBreakScreen), keyEquivalent: "")
+        breakScreenItem.state = Prefs.breakScreenEnabled ? .on : .off
+        breakSubmenu.addItem(breakScreenItem)
+
+        // Countdown overlay settings
         breakSubmenu.addItem(NSMenuItem.separator())
 
         let displayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
@@ -1410,6 +1567,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         posItem.submenu = posSubmenu
         breakSubmenu.addItem(posItem)
+
+        // Style settings
+        let styleItem = NSMenuItem(title: "Style", action: nil, keyEquivalent: "")
+        let styleSubmenu = NSMenu(title: "Style")
+        let overlayColorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        let overlayColorSubmenu = NSMenu(title: "Color")
+        for name in ["Green", "Blue", "Red", "Orange", "White", "Purple"] {
+            let item = NSMenuItem(title: name, action: #selector(setCountdownColor(_:)), keyEquivalent: "")
+            item.representedObject = name as AnyObject
+            item.state = Prefs.countdownColor == name ? .on : .off
+            overlayColorSubmenu.addItem(item)
+        }
+        overlayColorItem.submenu = overlayColorSubmenu
+        styleSubmenu.addItem(overlayColorItem)
+        let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        let sizeSubmenu = NSMenu(title: "Size")
+        for name in ["Compact", "Normal", "Large"] {
+            let item = NSMenuItem(title: name, action: #selector(setCountdownSize(_:)), keyEquivalent: "")
+            item.representedObject = name as AnyObject
+            item.state = Prefs.countdownSize == name ? .on : .off
+            sizeSubmenu.addItem(item)
+        }
+        sizeItem.submenu = sizeSubmenu
+        styleSubmenu.addItem(sizeItem)
+        styleItem.submenu = styleSubmenu
+        breakSubmenu.addItem(styleItem)
 
         breakItem.submenu = breakSubmenu
         menu.addItem(breakItem)
@@ -1708,6 +1891,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func startBreakTimer(_ sender: NSMenuItem) {
         guard let minutes = sender.representedObject as? Int else { return }
+        startBreakWithMinutes(minutes)
+    }
+
+    @objc func startCustomBreakTimer() {
+        let alert = NSAlert()
+        alert.messageText = "Custom Break Timer"
+        alert.informativeText = "Enter minutes:"
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
+        input.stringValue = "\(Prefs.breakDuration)"
+        alert.accessoryView = input
+        alert.addButton(withTitle: "Start")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            if let mins = Int(input.stringValue), mins > 0 {
+                startBreakWithMinutes(mins)
+            }
+        }
+    }
+
+    func startBreakWithMinutes(_ minutes: Int) {
         breakTimer?.invalidate()
         breakEndDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
         Prefs.breakDuration = minutes
@@ -1742,10 +1945,97 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         breakTimer?.invalidate()
         breakTimer = nil
         breakEndDate = nil
+        pomodoroActive = false
+        pomodoroOnBreak = false
         hideCountdownOverlay()
     }
 
+    @objc func saveCurrentPreset() {
+        var presets = Prefs.customPresets
+        let current = Prefs.breakDuration
+        if !presets.contains(current) {
+            presets.append(current)
+            presets.sort(by: >)
+            Prefs.customPresets = presets
+        }
+    }
+
+    @objc func clearPresets() {
+        Prefs.customPresets = []
+    }
+
+    @objc func toggleBreakSound() {
+        Prefs.breakSoundEnabled = !Prefs.breakSoundEnabled
+    }
+
+    @objc func toggleBreakScreen() {
+        Prefs.breakScreenEnabled = !Prefs.breakScreenEnabled
+    }
+
+    @objc func setBreakSound(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.breakSoundName = value
+        NSSound(named: NSSound.Name(value))?.play()
+    }
+
+    @objc func setCountdownColor(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.countdownColor = value
+        if !countdownWindows.isEmpty {
+            showCountdownOverlay()
+        }
+    }
+
+    @objc func setCountdownSize(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.countdownSize = value
+        if !countdownWindows.isEmpty {
+            showCountdownOverlay()
+        }
+    }
+
+    @objc func startPomodoro() {
+        pomodoroActive = true
+        pomodoroOnBreak = false
+        startBreakWithMinutes(Prefs.pomodoroWork)
+    }
+
+    @objc func stopPomodoro() {
+        pomodoroActive = false
+        pomodoroOnBreak = false
+        cancelBreakTimer()
+    }
+
+    @objc func setPomodoroWork(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? Int else { return }
+        Prefs.pomodoroWork = value
+    }
+
+    @objc func setPomodoroBreak(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? Int else { return }
+        Prefs.pomodoroBreak = value
+    }
+
     // MARK: - Countdown Overlay
+
+    func countdownNSColor() -> NSColor {
+        switch Prefs.countdownColor {
+        case "Blue": return NSColor(calibratedRed: 0.2, green: 0.6, blue: 1, alpha: 1)
+        case "Red": return NSColor(calibratedRed: 1, green: 0.3, blue: 0.3, alpha: 1)
+        case "Orange": return NSColor.orange
+        case "White": return NSColor.white
+        case "Purple": return NSColor(calibratedRed: 0.7, green: 0.4, blue: 1, alpha: 1)
+        default: return NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
+        }
+    }
+
+    func countdownSizeConfig() -> (width: CGFloat, height: CGFloat, fontSize: CGFloat) {
+        switch Prefs.countdownSize {
+        case "Compact": return (140, 40, 20)
+        case "Large": return (240, 65, 34)
+        default: return (180, 50, 26)
+        }
+    }
 
     func showCountdownOverlay() {
         hideCountdownOverlay()
@@ -1761,7 +2051,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         default: targetScreens = screens
         }
 
-        let size = CGSize(width: 180, height: 50)
+        let sizeConfig = countdownSizeConfig()
+        let size = CGSize(width: sizeConfig.width, height: sizeConfig.height)
+        let color = countdownNSColor()
         let padding: CGFloat = 20
         let menuBarHeight: CGFloat = 25
 
@@ -1795,7 +2087,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.ignoresMouseEvents = true
             window.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
-            let overlay = CountdownOverlayView(frame: NSRect(origin: .zero, size: size))
+            let overlay = CountdownOverlayView(frame: NSRect(origin: .zero, size: size), fontSize: sizeConfig.fontSize, color: color)
             window.contentView = overlay
             window.orderFrontRegardless()
             countdownWindows.append(window)
@@ -1817,8 +2109,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let remaining = max(0, Int(endDate.timeIntervalSinceNow))
+        let subtitle = pomodoroActive ? (pomodoroOnBreak ? "Break" : "Work") : "Break in"
         for window in countdownWindows {
-            (window.contentView as? CountdownOverlayView)?.update(remaining: remaining)
+            (window.contentView as? CountdownOverlayView)?.update(remaining: remaining, subtitle: subtitle)
         }
     }
 
@@ -1853,8 +2146,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Remove floating countdown overlay (break screen replaces it)
         hideCountdownOverlay()
 
-        // Play a sound notification too
+        // Track break stats
+        Prefs.breaksTakenToday += 1
+        Prefs.totalBreaksTaken += 1
+
+        // Play break sound
+        if Prefs.breakSoundEnabled {
+            NSSound(named: NSSound.Name(Prefs.breakSoundName))?.play()
+        }
+
+        // Send notification
         sendBreakNotification(title: "Time for a Break!", body: "You've been working hard. Step away for a few minutes.")
+
+        // Skip fullscreen break screen if disabled (countdown-only mode)
+        if !Prefs.breakScreenEnabled {
+            // Still handle Pomodoro cycling via dismissBreakScreen
+            if pomodoroActive {
+                dismissBreakScreen()
+            }
+            return
+        }
 
         // Create fullscreen break overlay on all screens
         for screen in NSScreen.screens {
@@ -1902,6 +2213,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         screensaverWindows.removeAll()
         contentViews.removeAll()
+
+        // Pomodoro auto-cycle
+        if pomodoroActive {
+            if pomodoroOnBreak {
+                // Break phase done → start work phase
+                pomodoroOnBreak = false
+                startBreakWithMinutes(Prefs.pomodoroWork)
+            } else {
+                // Work phase done → start break phase
+                pomodoroOnBreak = true
+                startBreakWithMinutes(Prefs.pomodoroBreak)
+            }
+        }
     }
 
     // MARK: - Lock Screen

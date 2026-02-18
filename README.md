@@ -25,8 +25,11 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Organized Folders** | `videos/` and `gifs/` subfolders keep your media tidy |
 | **Portable** | Move the whole folder anywhere — the app finds its videos |
 | **Auto Update** | Checks GitHub for newer versions and offers one-click update with backup |
-| **Break Reminder** | Countdown timer (60/45/30/15 min) with fullscreen break screen overlay |
-| **Floating Countdown** | On-screen countdown widget — choose All Screens/Built-in/External, any corner |
+| **Break Reminder** | Countdown timer (60/45/30/15 min or custom) with fullscreen break screen overlay |
+| **Floating Countdown** | On-screen countdown widget — choose screen, corner, color, and size |
+| **Pomodoro Mode** | Auto-cycling work/break timer with configurable durations |
+| **Break Sound** | Audible alert when break time arrives — 6 system sounds to choose from |
+| **Session Stats** | Track breaks taken today and total — visible in the menu |
 | **Lock Screen** | Password-protected screen lock — Cmd+Shift+L to lock, SHA-256 hashed password |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 

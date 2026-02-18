@@ -2,6 +2,23 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [3.4.0] - 2026-02-18
+
+### Added
+- **Custom break timer** — enter any number of minutes via input dialog
+- **Break timer presets** — save and manage your favorite timer durations
+- **Break sound** — audible alert (Glass, Hero, Ping, Pop, Purr, Submarine) when break screen appears
+- **Countdown overlay color** — 6 color options: Green, Blue, Red, Orange, White, Purple
+- **Countdown overlay size** — 3 sizes: Compact, Normal, Large
+- **Pomodoro mode** — auto-cycling work/break timer (configurable work 15-50 min, break 3-15 min)
+- **Session stats** — tracks breaks taken today and total, shown in Break Reminder menu
+
+### Changed
+- Version bumped to 3.4.0
+- Refactored startBreakTimer into reusable startBreakWithMinutes()
+
+---
+
 ## [3.3.0] - 2026-02-18
 
 ### Added
