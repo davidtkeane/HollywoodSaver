@@ -607,6 +607,14 @@ class Prefs {
         get { let v = defaults.integer(forKey: "breakDuration"); return v > 0 ? v : 60 }
         set { defaults.set(newValue, forKey: "breakDuration") }
     }
+    static var countdownScreen: String {
+        get { defaults.string(forKey: "countdownScreen") ?? "all" }
+        set { defaults.set(newValue, forKey: "countdownScreen") }
+    }
+    static var countdownPosition: String {
+        get { defaults.string(forKey: "countdownPosition") ?? "topRight" }
+        set { defaults.set(newValue, forKey: "countdownPosition") }
+    }
 
     // Version check cache
     static var lastVersionCheckDate: Double {
@@ -897,6 +905,44 @@ class LockScreenView: NSView, NSTextFieldDelegate {
     }
 }
 
+// MARK: - Countdown Overlay View
+
+class CountdownOverlayView: NSView {
+    var timeLabel: NSTextField!
+    var subtitleLabel: NSTextField!
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
+        layer?.cornerRadius = 12
+
+        subtitleLabel = NSTextField(labelWithString: "Break in")
+        subtitleLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        subtitleLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        subtitleLabel.alignment = .center
+        subtitleLabel.frame = NSRect(x: 0, y: 28, width: frame.width, height: 16)
+        subtitleLabel.autoresizingMask = [.width]
+        addSubview(subtitleLabel)
+
+        timeLabel = NSTextField(labelWithString: "00:00")
+        timeLabel.font = NSFont(name: "Menlo", size: 26) ?? NSFont.monospacedSystemFont(ofSize: 26, weight: .bold)
+        timeLabel.textColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
+        timeLabel.alignment = .center
+        timeLabel.frame = NSRect(x: 0, y: 2, width: frame.width, height: 30)
+        timeLabel.autoresizingMask = [.width]
+        addSubview(timeLabel)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func update(remaining: Int) {
+        let mins = remaining / 60
+        let secs = remaining % 60
+        timeLabel.stringValue = String(format: "%d:%02d", mins, secs)
+    }
+}
+
 // MARK: - App Delegate
 
 enum PlayMode {
@@ -906,7 +952,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "3.2.0"
+    static let appVersion = "3.3.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -923,6 +969,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var lockScreenWindows: [ScreensaverWindow] = []
     var lockScreenActive = false
     var versionCheckTimer: Timer?
+    var countdownWindows: [NSWindow] = []
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1339,6 +1386,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Countdown display settings
+        breakSubmenu.addItem(NSMenuItem.separator())
+
+        let displayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
+        let displaySubmenu = NSMenu(title: "Display")
+        for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
+            let item = NSMenuItem(title: label, action: #selector(setCountdownScreen(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.countdownScreen == value ? .on : .off
+            displaySubmenu.addItem(item)
+        }
+        displayItem.submenu = displaySubmenu
+        breakSubmenu.addItem(displayItem)
+
+        let posItem = NSMenuItem(title: "Position", action: nil, keyEquivalent: "")
+        let posSubmenu = NSMenu(title: "Position")
+        for (label, value) in [("Top Right", "topRight"), ("Top Left", "topLeft")] {
+            let item = NSMenuItem(title: label, action: #selector(setCountdownPosition(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.countdownPosition == value ? .on : .off
+            posSubmenu.addItem(item)
+        }
+        posItem.submenu = posSubmenu
+        breakSubmenu.addItem(posItem)
+
         breakItem.submenu = breakSubmenu
         menu.addItem(breakItem)
 
@@ -1648,12 +1720,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Timer fires every 60s to keep menu countdown fresh, and fires the break screen at end
+        // Timer fires every 1s to update countdown overlay and fires the break screen at end
         breakTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
             guard let self = self, let endDate = self.breakEndDate else {
                 timer.invalidate()
                 return
             }
+            self.updateCountdownOverlay()
             if Date() >= endDate {
                 timer.invalidate()
                 self.breakTimer = nil
@@ -1661,12 +1734,101 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showBreakScreen()
             }
         }
+
+        showCountdownOverlay()
     }
 
     @objc func cancelBreakTimer() {
         breakTimer?.invalidate()
         breakTimer = nil
         breakEndDate = nil
+        hideCountdownOverlay()
+    }
+
+    // MARK: - Countdown Overlay
+
+    func showCountdownOverlay() {
+        hideCountdownOverlay()
+
+        let screens = NSScreen.screens
+        let builtIn = screens.first { $0.localizedName.contains("Built") }
+        let externals = screens.filter { !$0.localizedName.contains("Built") }
+
+        let targetScreens: [NSScreen]
+        switch Prefs.countdownScreen {
+        case "builtin": targetScreens = builtIn.map { [$0] } ?? screens
+        case "external": targetScreens = externals.isEmpty ? screens : externals
+        default: targetScreens = screens
+        }
+
+        let size = CGSize(width: 180, height: 50)
+        let padding: CGFloat = 20
+        let menuBarHeight: CGFloat = 25
+
+        for screen in targetScreens {
+            let origin: NSPoint
+            if Prefs.countdownPosition == "topLeft" {
+                origin = NSPoint(x: screen.frame.minX + padding,
+                                 y: screen.frame.maxY - size.height - padding - menuBarHeight)
+            } else {
+                origin = NSPoint(x: screen.frame.maxX - size.width - padding,
+                                 y: screen.frame.maxY - size.height - padding - menuBarHeight)
+            }
+
+            let window = NSWindow(
+                contentRect: NSRect(origin: origin, size: size),
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .floating
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            window.ignoresMouseEvents = true
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+
+            let overlay = CountdownOverlayView(frame: NSRect(origin: .zero, size: size))
+            window.contentView = overlay
+            window.orderFrontRegardless()
+            countdownWindows.append(window)
+        }
+
+        updateCountdownOverlay()
+    }
+
+    func hideCountdownOverlay() {
+        for window in countdownWindows {
+            window.orderOut(nil)
+        }
+        countdownWindows.removeAll()
+    }
+
+    func updateCountdownOverlay() {
+        guard let endDate = breakEndDate else {
+            hideCountdownOverlay()
+            return
+        }
+        let remaining = max(0, Int(endDate.timeIntervalSinceNow))
+        for window in countdownWindows {
+            (window.contentView as? CountdownOverlayView)?.update(remaining: remaining)
+        }
+    }
+
+    @objc func setCountdownScreen(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.countdownScreen = value
+        if !countdownWindows.isEmpty {
+            showCountdownOverlay()
+        }
+    }
+
+    @objc func setCountdownPosition(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.countdownPosition = value
+        if !countdownWindows.isEmpty {
+            showCountdownOverlay()
+        }
     }
 
     func sendBreakNotification(title: String, body: String) {
@@ -1680,6 +1842,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showBreakScreen() {
         // Skip if lock screen is active
         guard !lockScreenActive else { return }
+
+        // Remove floating countdown overlay (break screen replaces it)
+        hideCountdownOverlay()
 
         // Play a sound notification too
         sendBreakNotification(title: "Time for a Break!", body: "You've been working hard. Step away for a few minutes.")

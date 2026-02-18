@@ -2,6 +2,20 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [3.3.0] - 2026-02-18
+
+### Added
+- **Floating countdown overlay** — on-screen countdown timer widget visible while break timer is active
+- **Display selection** — show countdown on All Screens, Built-in, or External only
+- **Position selection** — place countdown in Top Right or Top Left corner
+- Countdown overlay is click-through (doesn't block mouse events)
+- Overlay auto-hides when break screen appears or timer is cancelled
+
+### Changed
+- Version bumped to 3.3.0
+
+---
+
 ## [3.2.0] - 2026-02-18
 
 ### Added
