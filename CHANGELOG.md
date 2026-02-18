@@ -2,6 +2,13 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [2.3.0] - 2026-02-18
+
+### Changed
+- **build.sh auto-launches** — `bash build.sh` now automatically runs `run.sh` after a successful build. One command from zero to running app.
+
+---
+
 ## [2.2.0] - 2026-02-18
 
 ### Added

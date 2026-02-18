@@ -39,10 +39,9 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 git clone https://github.com/davidtkeane/HollywoodSaver.git
 cd HollywoodSaver
 bash build.sh
-bash run.sh
 ```
 
-The `run.sh` script launches the app and prints helpful info in the terminal about where to find the menu bar icon. You can also use `open HollywoodSaver.app` directly, but you won't see any terminal output.
+`bash build.sh` does everything — compiles the app, generates the icon, and automatically launches it. No need to run `run.sh` separately.
 
 ### Where is the icon?
 
