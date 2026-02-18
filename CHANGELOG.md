@@ -12,6 +12,11 @@ All notable changes to HollywoodSaver are documented here.
 - **Countdown in menu** — live countdown (MM:SS remaining) visible when timer is active
 - **Cancel timer** — cancel any active break timer from the menu
 
+### Fixed
+- **Auto-update reliability** — replaced AppleScript with `open -a Terminal` (no Automation permission needed)
+- **Error handling** — auto-update now shows error dialog instead of silently failing
+- **Version cache cleared on build** — `build.sh` clears cached version so app does a fresh check on launch
+
 ### Changed
 - Version bumped to 3.0.0
 
