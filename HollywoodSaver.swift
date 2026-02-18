@@ -3,6 +3,7 @@ import AVFoundation
 import QuartzCore
 import ImageIO
 import ServiceManagement
+import CryptoKit
 
 // MARK: - Custom Window (borderless windows need this to receive key events)
 
@@ -616,6 +617,42 @@ class Prefs {
         get { defaults.string(forKey: "cachedLatestVersion") }
         set { defaults.set(newValue, forKey: "cachedLatestVersion") }
     }
+    static var lastNotifiedVersion: String? {
+        get { defaults.string(forKey: "lastNotifiedVersion") }
+        set { defaults.set(newValue, forKey: "lastNotifiedVersion") }
+    }
+
+    // Lock screen password
+    static var lockPasswordHash: String? {
+        get { defaults.string(forKey: "lockPasswordHash") }
+        set { defaults.set(newValue, forKey: "lockPasswordHash") }
+    }
+    static var lockPasswordSalt: String? {
+        get { defaults.string(forKey: "lockPasswordSalt") }
+        set { defaults.set(newValue, forKey: "lockPasswordSalt") }
+    }
+    static var hasLockPassword: Bool {
+        return lockPasswordHash != nil && lockPasswordSalt != nil
+    }
+    static func setLockPassword(_ password: String) {
+        let saltData = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
+        let salt = saltData.map { String(format: "%02x", $0) }.joined()
+        let combined = salt + password
+        let hash = SHA256.hash(data: Data(combined.utf8))
+        lockPasswordSalt = salt
+        lockPasswordHash = hash.map { String(format: "%02x", $0) }.joined()
+    }
+    static func verifyLockPassword(_ password: String) -> Bool {
+        guard let salt = lockPasswordSalt, let storedHash = lockPasswordHash else { return false }
+        let combined = salt + password
+        let hash = SHA256.hash(data: Data(combined.utf8))
+        let computed = hash.map { String(format: "%02x", $0) }.joined()
+        return computed == storedHash
+    }
+    static func clearLockPassword() {
+        defaults.removeObject(forKey: "lockPasswordHash")
+        defaults.removeObject(forKey: "lockPasswordSalt")
+    }
 }
 
 // MARK: - Slider Menu Item View
@@ -700,6 +737,132 @@ class BreakReminderView: NSView {
     }
 }
 
+// MARK: - Lock Screen View
+
+class LockScreenView: NSView, NSTextFieldDelegate {
+    var passwordField: NSSecureTextField?
+    var errorLabel: NSTextField?
+    var onUnlock: (() -> Void)?
+    let isPasswordScreen: Bool
+
+    init(frame: NSRect, isPasswordScreen: Bool, onUnlock: @escaping () -> Void) {
+        self.isPasswordScreen = isPasswordScreen
+        self.onUnlock = onUnlock
+        super.init(frame: frame)
+        wantsLayer = true
+
+        if isPasswordScreen {
+            setupPasswordField()
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setupPasswordField() {
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 28))
+        field.placeholderString = "Enter password..."
+        field.alignment = .center
+        field.font = NSFont.systemFont(ofSize: 16)
+        field.bezelStyle = .roundedBezel
+        field.delegate = self
+        field.target = self
+        field.action = #selector(passwordSubmitted)
+        field.frame.origin = NSPoint(
+            x: bounds.midX - 120,
+            y: bounds.midY - 80
+        )
+        field.autoresizingMask = []
+        addSubview(field)
+        passwordField = field
+
+        let label = NSTextField(labelWithString: "")
+        label.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        label.textColor = NSColor.systemRed
+        label.alignment = .center
+        label.frame = NSRect(x: bounds.midX - 150, y: bounds.midY - 115, width: 300, height: 20)
+        label.autoresizingMask = []
+        addSubview(label)
+        errorLabel = label
+    }
+
+    @objc func passwordSubmitted() {
+        guard let password = passwordField?.stringValue, !password.isEmpty else { return }
+        if Prefs.verifyLockPassword(password) {
+            onUnlock?()
+        } else {
+            errorLabel?.stringValue = "Incorrect password"
+            shakeField()
+            passwordField?.stringValue = ""
+        }
+    }
+
+    func shakeField() {
+        guard let field = passwordField else { return }
+        let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        animation.duration = 0.4
+        animation.values = [-8, 8, -6, 6, -4, 4, 0]
+        field.layer?.add(animation, forKey: "shake")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        // Dark background
+        context.setFillColor(NSColor.black.withAlphaComponent(0.92).cgColor)
+        context.fill(bounds)
+
+        // Green glow circle
+        let centerX = bounds.midX
+        let centerY = bounds.midY + 60
+        let radius: CGFloat = 100
+        let glowColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.12)
+        for i in stride(from: radius * 2, through: radius, by: -10) {
+            context.setFillColor(glowColor.cgColor)
+            context.fillEllipse(in: CGRect(x: centerX - i, y: centerY - i, width: i * 2, height: i * 2))
+        }
+
+        // Lock icon
+        let lockFont = NSFont.systemFont(ofSize: 64)
+        let lockAttrs: [NSAttributedString.Key: Any] = [
+            .font: lockFont,
+            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.8)
+        ]
+        let lockStr = "🔒"
+        let lockSize = (lockStr as NSString).size(withAttributes: lockAttrs)
+        (lockStr as NSString).draw(at: NSPoint(x: centerX - lockSize.width / 2, y: centerY - lockSize.height / 2 + 10), withAttributes: lockAttrs)
+
+        // Title
+        let titleFont = NSFont.systemFont(ofSize: 42, weight: .bold)
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: titleFont,
+            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
+        ]
+        let title = "Screen Locked"
+        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
+        (title as NSString).draw(at: NSPoint(x: centerX - titleSize.width / 2, y: centerY - titleSize.height / 2 - 50), withAttributes: titleAttrs)
+
+        if isPasswordScreen {
+            // Hint text
+            let hintFont = NSFont.systemFont(ofSize: 14, weight: .regular)
+            let hintAttrs: [NSAttributedString.Key: Any] = [
+                .font: hintFont,
+                .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+            ]
+            let hint = "Enter your password and press Return to unlock"
+            let hintSize = (hint as NSString).size(withAttributes: hintAttrs)
+            (hint as NSString).draw(at: NSPoint(x: centerX - hintSize.width / 2, y: 60), withAttributes: hintAttrs)
+        }
+    }
+
+    func focusPasswordField() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.passwordField?.becomeFirstResponder()
+        }
+    }
+}
+
 // MARK: - App Delegate
 
 enum PlayMode {
@@ -709,7 +872,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "3.0.0"
+    static let appVersion = "3.1.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -723,6 +886,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var latestVersion: String?
     var breakTimer: Timer?
     var breakEndDate: Date?
+    var lockScreenWindows: [ScreensaverWindow] = []
+    var lockScreenActive = false
+    var versionCheckTimer: Timer?
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -832,8 +998,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem.menu = buildMenu()
 
-        // Check for updates in background
-        checkForUpdates()
+        // Check for updates in background (and every hour after)
+        checkForUpdates(forceRefresh: true)
+        versionCheckTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+            self?.checkForUpdates(forceRefresh: false)
+        }
 
         // Auto play on launch
         if Prefs.autoPlayEnabled, let filename = Prefs.lastMediaFilename {
@@ -1136,6 +1305,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         breakItem.submenu = breakSubmenu
         menu.addItem(breakItem)
 
+        // Lock Screen
+        let lockItem = NSMenuItem(title: "Lock Screen", action: nil, keyEquivalent: "")
+        let lockSubmenu = NSMenu(title: "Lock Screen")
+
+        let lockNowItem = NSMenuItem(title: "Lock Now", action: #selector(lockScreenNow), keyEquivalent: "L")
+        lockNowItem.keyEquivalentModifierMask = [.command, .shift]
+        lockNowItem.isEnabled = Prefs.hasLockPassword
+        lockSubmenu.addItem(lockNowItem)
+
+        lockSubmenu.addItem(NSMenuItem.separator())
+
+        let setPassTitle = Prefs.hasLockPassword ? "Change Password..." : "Set Password..."
+        let setPassItem = NSMenuItem(title: setPassTitle, action: #selector(showSetPasswordDialog), keyEquivalent: "")
+        lockSubmenu.addItem(setPassItem)
+
+        if Prefs.hasLockPassword {
+            let clearItem = NSMenuItem(title: "Clear Password", action: #selector(clearLockPasswordAction), keyEquivalent: "")
+            lockSubmenu.addItem(clearItem)
+        }
+
+        lockItem.submenu = lockSubmenu
+        menu.addItem(lockItem)
+
         // Contribute
         menu.addItem(NSMenuItem.separator())
         let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
@@ -1197,9 +1389,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Version Checker
 
-    func checkForUpdates() {
+    func checkForUpdates(forceRefresh: Bool = false) {
         let now = Date().timeIntervalSince1970
-        if now - Prefs.lastVersionCheckDate < 3600 {
+        if !forceRefresh && now - Prefs.lastVersionCheckDate < 3600 {
             latestVersion = Prefs.cachedLatestVersion
             return
         }
@@ -1212,6 +1404,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
             guard let data = data, error == nil else { return }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
                   let firstTag = json.first,
@@ -1220,9 +1413,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let remoteVersion = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
 
             DispatchQueue.main.async {
-                self?.latestVersion = remoteVersion
+                self.latestVersion = remoteVersion
                 Prefs.cachedLatestVersion = remoteVersion
                 Prefs.lastVersionCheckDate = Date().timeIntervalSince1970
+
+                // Send notification if newer version found (once per version)
+                if self.isNewerVersion(remoteVersion, than: AppDelegate.appVersion) {
+                    if Prefs.lastNotifiedVersion != remoteVersion {
+                        Prefs.lastNotifiedVersion = remoteVersion
+                        self.sendBreakNotification(
+                            title: "HollywoodSaver Update Available",
+                            body: "v\(AppDelegate.appVersion) → v\(remoteVersion) — Click the menu bar icon to update."
+                        )
+                    }
+                }
             }
         }.resume()
     }
@@ -1420,6 +1624,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func showBreakScreen() {
+        // Skip if lock screen is active
+        guard !lockScreenActive else { return }
+
         // Play a sound notification too
         sendBreakNotification(title: "Time for a Break!", body: "You've been working hard. Step away for a few minutes.")
 
@@ -1451,6 +1658,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.dismissBreakScreen()
             }
         }
+        inputMonitor?.start()
 
         // Auto-dismiss after 30 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
@@ -1461,12 +1669,214 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func dismissBreakScreen() {
+        inputMonitor?.stop()
+        inputMonitor = nil
         for window in screensaverWindows {
             window.orderOut(nil)
         }
         screensaverWindows.removeAll()
         contentViews.removeAll()
-        inputMonitor = nil
+    }
+
+    // MARK: - Lock Screen
+
+    @objc func lockScreenNow() {
+        guard Prefs.hasLockPassword, !lockScreenActive else { return }
+
+        // Dismiss break screen if showing
+        if !screensaverWindows.isEmpty && breakEndDate == nil && currentMode == nil {
+            dismissBreakScreen()
+        }
+        // Stop any active screensaver/ambient
+        if isPlaying { stopPlaying() }
+
+        lockScreenActive = true
+
+        activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleDisplaySleepDisabled],
+            reason: "Screen locked"
+        )
+
+        let screens = NSScreen.screens
+        let primaryScreen = NSScreen.main ?? screens[0]
+
+        for screen in screens {
+            let window = ScreensaverWindow(
+                contentRect: screen.frame,
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .init(rawValue: Int(CGShieldingWindowLevel()) + 1)
+            window.isOpaque = false
+            window.backgroundColor = .black
+            window.hasShadow = false
+            window.ignoresMouseEvents = false
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let isPrimary = (screen == primaryScreen)
+            let lockView = LockScreenView(frame: screen.frame, isPasswordScreen: isPrimary) { [weak self] in
+                self?.unlockScreen()
+            }
+            window.contentView = lockView
+
+            window.makeKeyAndOrderFront(nil)
+            lockScreenWindows.append(window)
+
+            if isPrimary {
+                lockView.focusPasswordField()
+            }
+        }
+
+        NSCursor.hide()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func unlockScreen() {
+        lockScreenActive = false
+        NSCursor.unhide()
+
+        for window in lockScreenWindows {
+            window.orderOut(nil)
+        }
+        lockScreenWindows.removeAll()
+
+        if let token = activityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            activityToken = nil
+        }
+    }
+
+    @objc func showSetPasswordDialog() {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+
+        let width: CGFloat = 260
+
+        if Prefs.hasLockPassword {
+            alert.messageText = "Change Lock Password"
+            alert.informativeText = "Enter your current password and choose a new one."
+
+            let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 96))
+
+            let currentLabel = NSTextField(labelWithString: "Current:")
+            currentLabel.frame = NSRect(x: 0, y: 70, width: 70, height: 20)
+            container.addSubview(currentLabel)
+
+            let currentField = NSSecureTextField(frame: NSRect(x: 72, y: 68, width: width - 72, height: 24))
+            container.addSubview(currentField)
+
+            let newLabel = NSTextField(labelWithString: "New:")
+            newLabel.frame = NSRect(x: 0, y: 38, width: 70, height: 20)
+            container.addSubview(newLabel)
+
+            let newField = NSSecureTextField(frame: NSRect(x: 72, y: 36, width: width - 72, height: 24))
+            container.addSubview(newField)
+
+            let confirmLabel = NSTextField(labelWithString: "Confirm:")
+            confirmLabel.frame = NSRect(x: 0, y: 6, width: 70, height: 20)
+            container.addSubview(confirmLabel)
+
+            let confirmField = NSSecureTextField(frame: NSRect(x: 72, y: 4, width: width - 72, height: 24))
+            container.addSubview(confirmField)
+
+            alert.accessoryView = container
+            alert.addButton(withTitle: "Change")
+            alert.addButton(withTitle: "Cancel")
+
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                let currentPass = currentField.stringValue
+                let newPass = newField.stringValue
+                let confirmPass = confirmField.stringValue
+
+                guard Prefs.verifyLockPassword(currentPass) else {
+                    let err = NSAlert()
+                    err.messageText = "Incorrect Password"
+                    err.informativeText = "The current password you entered is wrong."
+                    err.alertStyle = .warning
+                    err.runModal()
+                    return
+                }
+                guard !newPass.isEmpty else {
+                    let err = NSAlert()
+                    err.messageText = "Empty Password"
+                    err.informativeText = "Password cannot be empty."
+                    err.alertStyle = .warning
+                    err.runModal()
+                    return
+                }
+                guard newPass == confirmPass else {
+                    let err = NSAlert()
+                    err.messageText = "Passwords Don't Match"
+                    err.informativeText = "New password and confirmation must match."
+                    err.alertStyle = .warning
+                    err.runModal()
+                    return
+                }
+                Prefs.setLockPassword(newPass)
+            }
+        } else {
+            alert.messageText = "Set Lock Password"
+            alert.informativeText = "Choose a password for the lock screen."
+
+            let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 64))
+
+            let newLabel = NSTextField(labelWithString: "Password:")
+            newLabel.frame = NSRect(x: 0, y: 38, width: 70, height: 20)
+            container.addSubview(newLabel)
+
+            let newField = NSSecureTextField(frame: NSRect(x: 72, y: 36, width: width - 72, height: 24))
+            container.addSubview(newField)
+
+            let confirmLabel = NSTextField(labelWithString: "Confirm:")
+            confirmLabel.frame = NSRect(x: 0, y: 6, width: 70, height: 20)
+            container.addSubview(confirmLabel)
+
+            let confirmField = NSSecureTextField(frame: NSRect(x: 72, y: 4, width: width - 72, height: 24))
+            container.addSubview(confirmField)
+
+            alert.accessoryView = container
+            alert.addButton(withTitle: "Set Password")
+            alert.addButton(withTitle: "Cancel")
+
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                let newPass = newField.stringValue
+                let confirmPass = confirmField.stringValue
+
+                guard !newPass.isEmpty else {
+                    let err = NSAlert()
+                    err.messageText = "Empty Password"
+                    err.informativeText = "Password cannot be empty."
+                    err.alertStyle = .warning
+                    err.runModal()
+                    return
+                }
+                guard newPass == confirmPass else {
+                    let err = NSAlert()
+                    err.messageText = "Passwords Don't Match"
+                    err.informativeText = "Password and confirmation must match."
+                    err.alertStyle = .warning
+                    err.runModal()
+                    return
+                }
+                Prefs.setLockPassword(newPass)
+            }
+        }
+    }
+
+    @objc func clearLockPasswordAction() {
+        let alert = NSAlert()
+        alert.messageText = "Clear Lock Password?"
+        alert.informativeText = "This will remove the lock screen password. You won't be able to lock the screen until you set a new one."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            Prefs.clearLockPassword()
+        }
     }
 
     // MARK: - Screen items submenu

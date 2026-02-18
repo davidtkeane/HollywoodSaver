@@ -26,6 +26,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Portable** | Move the whole folder anywhere — the app finds its videos |
 | **Auto Update** | Checks GitHub for newer versions and offers one-click update with backup |
 | **Break Reminder** | Countdown timer (60/45/30/15 min) with fullscreen break screen overlay |
+| **Lock Screen** | Password-protected screen lock — Cmd+Shift+L to lock, SHA-256 hashed password |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
 ## Quick Start
@@ -123,7 +124,7 @@ Then just open the app. Works on any Apple Silicon Mac (M1-M4) running macOS 15+
 
 ```
 HollywoodSaver/
-  HollywoodSaver.swift    # All app logic (~1600 lines)
+  HollywoodSaver.swift    # All app logic (~2080 lines)
   build.sh                # Build script — creates the .app bundle
   run.sh                  # Launcher with terminal info
   ranger.png              # Custom menu bar + app icon

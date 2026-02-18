@@ -2,6 +2,27 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [3.1.0] - 2026-02-18
+
+### Added
+- **Lock Screen** — password-protected screen lock with fullscreen overlay on all screens
+- **Lock Screen menu** — Lock Now (Cmd+Shift+L), Set/Change Password, Clear Password
+- **SHA-256 hashed password** — lock password stored securely with random salt (not plaintext)
+- **Multi-screen lock** — password field on primary screen, overlay on all screens
+- **Wrong password feedback** — shake animation + red error text on incorrect entry
+- **Update notification** — system notification when a new version is detected (like a real app!)
+- **Periodic version check** — checks GitHub every hour automatically, not just on launch
+
+### Fixed
+- **Break Reminder Escape key** — Escape/click/mouse now properly dismisses the break screen (InputMonitor was created but never started)
+- **Break screen cleanup** — InputMonitor now properly stopped before cleanup to prevent event monitor leaks
+
+### Changed
+- Version bumped to 3.1.0
+- Break screen skipped while lock screen is active
+
+---
+
 ## [3.0.0] - 2026-02-18
 
 ### Added
