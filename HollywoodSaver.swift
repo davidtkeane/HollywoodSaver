@@ -681,10 +681,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let fm = FileManager.default
         for candidate in candidates {
             let folder = (candidate as NSString).deletingLastPathComponent
-            if fm.fileExists(atPath: candidate),
-               let files = try? fm.contentsOfDirectory(atPath: folder),
-               files.contains(where: { AppDelegate.allExtensions.contains(($0 as NSString).pathExtension.lowercased()) }) {
-                return candidate
+            if fm.fileExists(atPath: candidate) {
+                // Check root folder and subfolders for media files
+                let foldersToCheck = [folder] + AppDelegate.mediaSubfolders.map {
+                    (folder as NSString).appendingPathComponent($0)
+                }
+                for checkFolder in foldersToCheck {
+                    if let files = try? fm.contentsOfDirectory(atPath: checkFolder),
+                       files.contains(where: { AppDelegate.allExtensions.contains(($0 as NSString).pathExtension.lowercased()) }) {
+                        return candidate
+                    }
+                }
             }
         }
         for candidate in candidates {
@@ -700,15 +707,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return AppDelegate.gifExtensions.contains(ext)
     }
 
+    static let mediaSubfolders = ["videos", "gifs"]
+
     func findMedia() -> [String] {
         let fm = FileManager.default
         var media: [String] = []
 
-        if let files = try? fm.contentsOfDirectory(atPath: appFolder) {
-            for file in files.sorted() {
-                let ext = (file as NSString).pathExtension.lowercased()
-                if AppDelegate.allExtensions.contains(ext) {
-                    media.append((appFolder as NSString).appendingPathComponent(file))
+        let folders = [appFolder] + AppDelegate.mediaSubfolders.map {
+            (appFolder as NSString).appendingPathComponent($0)
+        }
+
+        for folder in folders {
+            if let files = try? fm.contentsOfDirectory(atPath: folder) {
+                for file in files.sorted() {
+                    let ext = (file as NSString).pathExtension.lowercased()
+                    if AppDelegate.allExtensions.contains(ext) {
+                        media.append((folder as NSString).appendingPathComponent(file))
+                    }
                 }
             }
         }
@@ -995,6 +1010,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = Prefs.launchAtLogin ? .on : .off
         menu.addItem(loginItem)
 
+        // Contribute
+        menu.addItem(NSMenuItem.separator())
+        let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
+        let contributeSubmenu = NSMenu(title: "Contribute")
+        let coffeeItem = NSMenuItem(title: "☕  Buy Me a Coffee", action: #selector(openBuyMeACoffee), keyEquivalent: "")
+        contributeSubmenu.addItem(coffeeItem)
+        let hodlItem = NSMenuItem(title: "🪙  Hodl H3LLCOIN", action: #selector(openH3llcoin), keyEquivalent: "")
+        contributeSubmenu.addItem(hodlItem)
+        contributeItem.submenu = contributeSubmenu
+        menu.addItem(contributeItem)
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return menu
@@ -1033,6 +1059,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 Prefs.launchAtLogin = !Prefs.launchAtLogin
             }
         }
+    }
+
+    @objc func openBuyMeACoffee() {
+        NSWorkspace.shared.open(URL(string: "https://buymeacoffee.com/davidtkeane")!)
+    }
+
+    @objc func openH3llcoin() {
+        NSWorkspace.shared.open(URL(string: "https://h3llcoin.com/how-to-buy.html")!)
     }
 
     // MARK: - Matrix Rain settings actions
@@ -1098,6 +1132,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ambientHeader.isEnabled = false
         menu.addItem(ambientHeader)
 
+        let allAmbient = NSMenuItem(title: "  All Screens", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
+        allAmbient.representedObject = (file, NSScreen.screens) as AnyObject
+        menu.addItem(allAmbient)
+
+        if let bi = builtIn {
+            let item = NSMenuItem(title: "  \(bi.localizedName)", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
+            item.representedObject = (file, [bi]) as AnyObject
+            menu.addItem(item)
+        }
         for ext in externals {
             let item = NSMenuItem(title: "  \(ext.localizedName)", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
             item.representedObject = (file, [ext]) as AnyObject
