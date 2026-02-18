@@ -21,7 +21,7 @@ Built with Swift in a single file. No bloat. No frameworks. Just pure macOS good
 **TryHackMe:** [rangersmyth](https://tryhackme.com/p/rangersmyth) (Top 8%)
 
 **About David:**
-- 🎓 Cybersecurity Master's student (Year 1) at University of Galway
+- 🎓 Cybersecurity Master's student (Year 1) at NCI Dublin.
 - 🧠 Applied Psychology BSc — Understanding humans makes better security
 - 🎖️ Combat medic mindset: *assess, adapt, protect*
 - 🏆 Battlefield tactician: Top 0.04% BF2 globally
@@ -71,26 +71,34 @@ H3LLCOIN is a cryptocurrency project built for the Rangers community. Every coin
 
 ### Where to Buy:
 
-🌐 **Official Website:** [h3llcoin.cloud](https://h3llcoin.cloud/)
+🌐 **Official Website:** [h3llcoin.com](https://h3llcoin.com/)
 
-**Why buy H3LLCOIN?**
-- ✅ Support accessibility technology
-- ✅ Fund Ranger open source projects
-- ✅ Join a community building real solutions
-- ✅ Help transform disabilities into superpowers
+**How to buy in 3 steps:**
+1. Get SOL on [Coinbase](https://coinbase.com), [Binance](https://binance.com), or [Kraken](https://kraken.com)
+2. Transfer SOL to your [Phantom wallet](https://phantom.app)
+3. [Swap SOL → H3LL on Jupiter](https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&buy=BJP255e79kNzeBkDPJx8Dkgep32hwF56e1UCWKdBCvie) — H3LL is pre-loaded
+
+**Contract:** `BJP255e79kNzeBkDPJx8Dkgep32hwF56e1UCWKdBCvie`
 
 ---
 
-## 💰 Donate to the Cause
+## ☕ Buy Me a Coffee
+
+[![Buy me a coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=davidtkeane&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/davidtkeane)
+
+---
+
+## 💰 Support the Cause
 
 Your support helps build technology that works for **everyone**, not just the able-bodied.
 
 **Ways to support:**
-1. 🪙 **Buy H3LLCOIN** at [h3llcoin.cloud](https://h3llcoin.cloud/)
-2. ⭐ **Star the repo** on [GitHub](https://github.com/davidtkeane/HollywoodSaver)
-3. 📢 **Share HollywoodSaver** with other Mac users
-4. 🐛 **Report bugs** or suggest features
-5. 💻 **Contribute code** — pull requests welcome!
+1. ☕ **[Buy Me a Coffee](https://buymeacoffee.com/davidtkeane)** — quick and easy
+2. 🪙 **Buy H3LLCOIN** at [h3llcoin.com](https://h3llcoin.com/) — join the community
+3. ⭐ **Star the repo** on [GitHub](https://github.com/davidtkeane/HollywoodSaver)
+4. 📢 **Share HollywoodSaver** with other Mac users
+5. 🐛 **Report bugs** or suggest features
+6. 💻 **Contribute code** — pull requests welcome!
 
 ---
 
@@ -166,7 +174,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 ## 🌐 Connect
 
 **David Keane:**
-- 🌐 Website: [h3llcoin.cloud](https://h3llcoin.cloud/)
+- 🌐 Website: [h3llcoin.com](https://h3llcoin.com/)
 - 💼 GitHub: [@davidtkeane](https://github.com/davidtkeane)
 - 🔐 TryHackMe: [rangersmyth](https://tryhackme.com/p/rangersmyth)
 - 💬 Email: [david@icanhelp.ie](mailto:david@icanhelp.ie)
@@ -175,7 +183,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 - 🎬 HollywoodSaver: [github.com/davidtkeane/HollywoodSaver](https://github.com/davidtkeane/HollywoodSaver)
 - 🔗 RangerBlock: P2P blockchain network
 - 🎖️ RangerOS: Accessibility security platform
-- 🪙 H3LLCOIN: [h3llcoin.cloud](https://h3llcoin.cloud/)
+- 🪙 H3LLCOIN: [h3llcoin.com](https://h3llcoin.com/)
 
 ---
 

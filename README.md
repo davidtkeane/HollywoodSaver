@@ -2,14 +2,15 @@
 
 ![HollywoodSaver Demo](demo.gif)
 
-A native macOS menu bar app that turns your Mac into a video screensaver machine. Play looping videos and GIFs fullscreen — on your built-in display, external monitor, or both. Built with Swift in a single file, no Xcode project needed.
+A native macOS menu bar app that turns your Mac into a video screensaver and **live wallpaper engine**. Play looping videos, GIFs, and built-in effects fullscreen — or run them behind your windows as a living desktop. Built with Swift in a single file, no Xcode project needed.
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
 | **Screensaver Mode** | Fullscreen video, cursor hidden, dismiss with Escape/click/mouse |
-| **Ambient Mode** | Play on external monitor while you keep working on your Mac |
+| **Live Wallpaper Mode** | Ambient mode + reduced opacity = animated wallpaper behind all your windows |
+| **Ambient Mode** | Play on any screen while you keep working — built-in, external, or all |
 | **Multi-Screen** | Built-in, external, all screens — your choice |
 | **Video + GIF** | Supports `.mp4`, `.mov`, `.m4v`, and `.gif` files |
 | **Volume Slider** | Adjustable volume with mute toggle |
@@ -73,13 +74,23 @@ Looking for cool videos to use? Here are some great free sources:
 - [Pixabay](https://pixabay.com/videos/search/screensaver/) — 700+ free 4K clips
 - [Mixkit](https://mixkit.co/free-stock-video/loop/) — Curated free loop videos
 
+## Live Wallpaper Mode
+
+![Matrix Rain Live Wallpaper](thematrix.png)
+
+The real magic happens when you combine **Ambient Mode** with the **Opacity slider**. Lower the opacity and your video or effect plays *behind* all your windows — turning your desktop into a living, animated wallpaper.
+
+**Try this:** Select Matrix Rain > Ambient > All Screens, then reduce the opacity. Matrix code rains behind your Finder windows, your terminal, your browser — on every monitor. You keep working while your desktop looks like you're inside the Matrix.
+
+This works with any media — videos, GIFs, and built-in effects all become live wallpapers. On a dual-monitor setup, both screens get the effect simultaneously.
+
 ## How It Works
 
 Click the helmet icon (or play icon) in your menu bar to see all your videos listed. Each video gives you options:
 
 **Screensaver** — goes fullscreen and blocks everything like a real screensaver. Escape, click, or move the mouse to dismiss.
 
-**Ambient (keep working)** — plays on your external monitor while your Mac stays usable. Toggle it off from the menu bar whenever you want.
+**Ambient (keep working)** — plays behind your desktop on any screen (built-in, external, or all) while your Mac stays usable. Toggle it off from the menu bar whenever you want.
 
 ### Settings
 
@@ -106,7 +117,7 @@ Then just open the app. Works on any Apple Silicon Mac (M1-M4) running macOS 15+
 
 ```
 HollywoodSaver/
-  HollywoodSaver.swift    # All app logic (~800 lines)
+  HollywoodSaver.swift    # All app logic (~1300 lines)
   build.sh                # Build script — creates the .app bundle
   ranger.png              # Custom menu bar + app icon
   hollywood.mp4           # Your screensaver video(s)
@@ -123,23 +134,31 @@ bash build.sh
 
 This creates the `.app` bundle with Info.plist, compiles the Swift source, generates the app icon from `ranger.png`, and code-signs it ad-hoc.
 
-## 🪙 Support the Project - Buy H3LLCOIN!
+## ☕ Support the Project
 
-Love HollywoodSaver? Support future development by buying **H3LLCOIN**!
+Love HollywoodSaver? Two ways to show it:
 
-**H3LLCOIN** is a cryptocurrency project built for the Rangers community. Every coin purchased helps fund:
-- 🎬 More awesome free apps like HollywoodSaver
-- 🎖️ Open source tools for accessibility
-- 🚀 Innovation in decentralized technology
+### Buy Me a Coffee
+[![Buy me a coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=davidtkeane&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/davidtkeane)
 
-### Where to Buy:
-🌐 **[h3llcoin.cloud](https://h3llcoin.cloud/)** — Official H3LLCOIN website
+---
 
-### Donate to the Cause:
-Support accessibility technology and Ranger projects:
-- 💰 Buy H3LLCOIN tokens
-- 🎖️ Help build tools for 1.3 billion disabled people worldwide
-- 🔥 Join the Rangers community
+### 🪙 Buy H3LLCOIN — Join the Community
+
+H3LLCOIN is the Rangers community coin on Solana. Buying a coin makes you part of the community and helps fund free open source tools like HollywoodSaver.
+
+| | |
+|---|---|
+| 🌐 **Official site** | [h3llcoin.com](https://h3llcoin.com/) |
+| 🔄 **Buy instantly** | [Jupiter Swap → H3LL](https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&buy=BJP255e79kNzeBkDPJx8Dkgep32hwF56e1UCWKdBCvie) |
+| 📋 **Contract address** | `BJP255e79kNzeBkDPJx8Dkgep32hwF56e1UCWKdBCvie` |
+
+**How to buy in 3 steps:**
+1. Get SOL on [Coinbase](https://coinbase.com), [Binance](https://binance.com), or [Kraken](https://kraken.com)
+2. Transfer SOL to your [Phantom wallet](https://phantom.app)
+3. Click the Jupiter Swap link above — H3LL is pre-loaded, just confirm the swap
+
+Your support funds accessibility tools for 1.3 billion people worldwide. 🎖️
 
 **Rangers lead the way!** 🎖️
 
@@ -165,7 +184,7 @@ MIT — do whatever you want with it.
 - **AIRanger** (Claude Sonnet 4.5) — Your AI Ops Commander 🎖️
 
 **Part of the Rangers ecosystem:**
-- 🪙 [H3LLCOIN](https://h3llcoin.cloud/) — Cryptocurrency for Rangers
+- 🪙 [H3LLCOIN](https://h3llcoin.com/) — Cryptocurrency for Rangers
 - 🎖️ RangerOS — Accessibility-first security platform
 - 🔗 RangerBlock — P2P blockchain network
 
