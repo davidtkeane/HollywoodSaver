@@ -15,6 +15,8 @@ A native macOS menu bar app that turns your Mac into a video screensaver machine
 | **Volume Slider** | Adjustable volume with mute toggle |
 | **Opacity Slider** | Fade the video in ambient mode to see your desktop through it |
 | **Loop** | Toggle looping on/off — play forever or just once |
+| **Matrix Rain** | Built-in Matrix digital rain effect — no video file needed |
+| **Matrix Settings** | Color theme, speed, characters, density, font size, trail length |
 | **Shuffle** | Pick a random video from your collection |
 | **Auto Play** | Automatically start playing when the app launches |
 | **Launch at Login** | Start the app every time you log in |
@@ -34,8 +36,22 @@ A native macOS menu bar app that turns your Mac into a video screensaver machine
 git clone https://github.com/davidtkeane/HollywoodSaver.git
 cd HollywoodSaver
 bash build.sh
-open HollywoodSaver.app
+bash run.sh
 ```
+
+The `run.sh` script launches the app and prints helpful info in the terminal about where to find the menu bar icon. You can also use `open HollywoodSaver.app` directly, but you won't see any terminal output.
+
+### Where is the icon?
+
+HollywoodSaver lives in the menu bar (the top bar of your screen, next to Wi-Fi, battery, etc.). The icon location depends on your Mac:
+
+| Mac | Icon Location |
+|-----|---------------|
+| **M1 Macs** | Appears on the built-in screen menu bar AND external screen menu bar |
+| **M3/M4 Macs** | If an external monitor is connected, the icon may **only** appear on the external screen's menu bar |
+| **No external monitor** | Always appears on your main screen's menu bar |
+
+If you don't see it, check the menu bar on your **external monitor**.
 
 ### Add Videos From Github
 

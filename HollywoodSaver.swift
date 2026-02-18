@@ -165,6 +165,305 @@ class GifPlayerView: NSView, ScreensaverContent {
     }
 }
 
+// MARK: - Matrix Rain Configuration
+
+enum MatrixColorTheme: String, CaseIterable {
+    case green = "Classic Green"
+    case blue = "Blue"
+    case red = "Red"
+    case amber = "Amber"
+    case white = "White"
+    case rainbow = "Rainbow"
+
+    var primaryColor: NSColor {
+        switch self {
+        case .green:   return NSColor(red: 0, green: 1, blue: 0, alpha: 1)
+        case .blue:    return NSColor(red: 0.2, green: 0.6, blue: 1, alpha: 1)
+        case .red:     return NSColor(red: 1, green: 0.2, blue: 0.2, alpha: 1)
+        case .amber:   return NSColor(red: 1, green: 0.75, blue: 0, alpha: 1)
+        case .white:   return NSColor.white
+        case .rainbow: return NSColor.green
+        }
+    }
+}
+
+enum MatrixSpeed: String, CaseIterable {
+    case slow = "Slow"
+    case medium = "Medium"
+    case fast = "Fast"
+
+    var updatesPerSecond: Double {
+        switch self {
+        case .slow:   return 8
+        case .medium: return 15
+        case .fast:   return 25
+        }
+    }
+}
+
+enum MatrixCharacterSet: String, CaseIterable {
+    case katakana = "Katakana"
+    case latin = "Latin"
+    case numbers = "Numbers"
+    case mixed = "Mixed"
+}
+
+enum MatrixDensity: String, CaseIterable {
+    case light = "Light"
+    case medium = "Medium"
+    case heavy = "Heavy"
+
+    var columnSkip: Int {
+        switch self {
+        case .light:  return 3
+        case .medium: return 2
+        case .heavy:  return 1
+        }
+    }
+}
+
+enum MatrixFontSize: String, CaseIterable {
+    case small = "Small"
+    case medium = "Medium"
+    case large = "Large"
+
+    var pointSize: CGFloat {
+        switch self {
+        case .small:  return 10
+        case .medium: return 14
+        case .large:  return 20
+        }
+    }
+}
+
+enum MatrixTrailLength: String, CaseIterable {
+    case short = "Short"
+    case medium = "Medium"
+    case long = "Long"
+
+    var fadeSteps: Int {
+        switch self {
+        case .short:  return 8
+        case .medium: return 16
+        case .long:   return 30
+        }
+    }
+}
+
+// MARK: - Matrix Rain View
+
+class MatrixRainView: NSView, ScreensaverContent {
+    struct RainColumn {
+        var headRow: Int
+        var speed: Double
+        var characters: [Character]
+        var length: Int
+        var active: Bool
+        var hue: CGFloat
+        var delay: Double
+    }
+
+    var colorTheme: MatrixColorTheme
+    var speed: MatrixSpeed
+    var charSet: MatrixCharacterSet
+    var density: MatrixDensity
+    var fontSize: MatrixFontSize
+    var trailLength: MatrixTrailLength
+
+    var cellWidth: CGFloat
+    var cellHeight: CGFloat
+    var numColumns: Int
+    var numRows: Int
+
+    var columns: [RainColumn] = []
+    var displayLink: CVDisplayLink?
+    var lastTimestamp: Double = 0
+    var elapsed: Double = 0
+    var characterPool: [Character] = []
+    var flickerCounter = 0
+
+    override init(frame: NSRect) {
+        colorTheme = MatrixColorTheme(rawValue: Prefs.matrixColorTheme) ?? .green
+        speed = MatrixSpeed(rawValue: Prefs.matrixSpeed) ?? .medium
+        charSet = MatrixCharacterSet(rawValue: Prefs.matrixCharacterSet) ?? .katakana
+        density = MatrixDensity(rawValue: Prefs.matrixDensity) ?? .medium
+        fontSize = MatrixFontSize(rawValue: Prefs.matrixFontSize) ?? .medium
+        trailLength = MatrixTrailLength(rawValue: Prefs.matrixTrailLength) ?? .medium
+
+        let ptSize = fontSize.pointSize
+        cellWidth = ptSize * 0.7
+        cellHeight = ptSize * 1.2
+        numColumns = max(1, Int(frame.width / cellWidth))
+        numRows = max(1, Int(frame.height / cellHeight))
+
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+
+        characterPool = buildCharacterPool()
+        setupColumns()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func buildCharacterPool() -> [Character] {
+        var pool: [Character] = []
+        switch charSet {
+        case .katakana:
+            for scalar in 0x30A0...0x30FF {
+                if let u = Unicode.Scalar(scalar) { pool.append(Character(u)) }
+            }
+        case .latin:
+            for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { pool.append(c) }
+        case .numbers:
+            for c in "0123456789" { pool.append(c) }
+        case .mixed:
+            for scalar in 0x30A0...0x30FF {
+                if let u = Unicode.Scalar(scalar) { pool.append(Character(u)) }
+            }
+            for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" { pool.append(c) }
+        }
+        return pool
+    }
+
+    func randomCharacter() -> Character {
+        characterPool[Int.random(in: 0..<characterPool.count)]
+    }
+
+    func setupColumns() {
+        columns = []
+        for col in 0..<numColumns {
+            let active = (col % density.columnSkip == 0)
+            let chars = (0..<(numRows + trailLength.fadeSteps)).map { _ in randomCharacter() }
+            let baseLength = trailLength.fadeSteps
+            let length = baseLength + Int.random(in: -baseLength/4...baseLength/4)
+            columns.append(RainColumn(
+                headRow: Int.random(in: -numRows...0),
+                speed: Double.random(in: 0.7...1.3),
+                characters: chars,
+                length: max(4, length),
+                active: active,
+                hue: CGFloat.random(in: 0...1),
+                delay: Double.random(in: 0...2)
+            ))
+        }
+    }
+
+    func startPlayback() {
+        lastTimestamp = 0
+        elapsed = 0
+
+        CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
+        guard let link = displayLink else { return }
+
+        let callback: CVDisplayLinkOutputCallback = { _, inNow, _, _, _, userInfo -> CVReturn in
+            let view = Unmanaged<MatrixRainView>.fromOpaque(userInfo!).takeUnretainedValue()
+            let timestamp = Double(inNow.pointee.videoTime) / Double(inNow.pointee.videoTimeScale)
+
+            if view.lastTimestamp == 0 { view.lastTimestamp = timestamp }
+            let dt = timestamp - view.lastTimestamp
+            view.lastTimestamp = timestamp
+
+            DispatchQueue.main.async {
+                view.updateState(dt: dt)
+                view.setNeedsDisplay(view.bounds)
+            }
+            return kCVReturnSuccess
+        }
+
+        let pointer = Unmanaged.passUnretained(self).toOpaque()
+        CVDisplayLinkSetOutputCallback(link, callback, pointer)
+        CVDisplayLinkStart(link)
+    }
+
+    func stopPlayback() {
+        if let link = displayLink {
+            CVDisplayLinkStop(link)
+            displayLink = nil
+        }
+    }
+
+    func updateState(dt: Double) {
+        elapsed += dt
+        let interval = 1.0 / speed.updatesPerSecond
+        guard elapsed >= interval else { return }
+        elapsed -= interval
+        flickerCounter += 1
+
+        for i in 0..<columns.count {
+            guard columns[i].active else { continue }
+
+            if columns[i].delay > 0 {
+                columns[i].delay -= interval
+                continue
+            }
+
+            columns[i].headRow += 1
+
+            // Flicker: swap a random character in the trail every few ticks
+            if flickerCounter % 3 == 0 {
+                let idx = Int.random(in: 0..<columns[i].characters.count)
+                columns[i].characters[idx] = randomCharacter()
+            }
+
+            // Reset column when it's fully off screen
+            if columns[i].headRow > numRows + columns[i].length {
+                columns[i].headRow = Int.random(in: -columns[i].length...0)
+                columns[i].speed = Double.random(in: 0.7...1.3)
+                columns[i].delay = Double.random(in: 0...1.5)
+                if colorTheme == .rainbow {
+                    columns[i].hue = CGFloat.random(in: 0...1)
+                }
+            }
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        context.setFillColor(NSColor.black.cgColor)
+        context.fill(bounds)
+
+        let font = CTFontCreateWithName("Menlo" as CFString, fontSize.pointSize, nil)
+
+        for (colIndex, column) in columns.enumerated() where column.active && column.delay <= 0 {
+            let x = CGFloat(colIndex) * cellWidth
+
+            for rowOffset in 0...column.length {
+                let row = column.headRow - rowOffset
+                guard row >= 0, row < numRows else { continue }
+
+                let y = bounds.height - CGFloat(row + 1) * cellHeight
+
+                let color: NSColor
+                if rowOffset == 0 {
+                    color = NSColor.white
+                } else {
+                    let alpha = CGFloat(max(0, 1.0 - Double(rowOffset) / Double(column.length)))
+                    if colorTheme == .rainbow {
+                        color = NSColor(hue: column.hue, saturation: 1, brightness: 1, alpha: alpha)
+                    } else {
+                        color = colorTheme.primaryColor.withAlphaComponent(alpha)
+                    }
+                }
+
+                let charIndex = abs(row + colIndex) % column.characters.count
+                let char = String(column.characters[charIndex])
+
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: font as Any,
+                    .foregroundColor: color,
+                ]
+                let attrStr = NSAttributedString(string: char, attributes: attrs)
+                let line = CTLineCreateWithAttributedString(attrStr)
+
+                context.textPosition = CGPoint(x: x, y: y)
+                CTLineDraw(line, context)
+            }
+        }
+    }
+}
+
 // MARK: - Input Monitor
 
 class InputMonitor {
@@ -275,6 +574,32 @@ class Prefs {
         get { defaults.string(forKey: "lastPlayMode") }
         set { defaults.set(newValue, forKey: "lastPlayMode") }
     }
+
+    // Matrix Rain preferences
+    static var matrixColorTheme: String {
+        get { defaults.string(forKey: "matrixColorTheme") ?? "Classic Green" }
+        set { defaults.set(newValue, forKey: "matrixColorTheme") }
+    }
+    static var matrixSpeed: String {
+        get { defaults.string(forKey: "matrixSpeed") ?? "Medium" }
+        set { defaults.set(newValue, forKey: "matrixSpeed") }
+    }
+    static var matrixCharacterSet: String {
+        get { defaults.string(forKey: "matrixCharacterSet") ?? "Katakana" }
+        set { defaults.set(newValue, forKey: "matrixCharacterSet") }
+    }
+    static var matrixDensity: String {
+        get { defaults.string(forKey: "matrixDensity") ?? "Medium" }
+        set { defaults.set(newValue, forKey: "matrixDensity") }
+    }
+    static var matrixFontSize: String {
+        get { defaults.string(forKey: "matrixFontSize") ?? "Medium" }
+        set { defaults.set(newValue, forKey: "matrixFontSize") }
+    }
+    static var matrixTrailLength: String {
+        get { defaults.string(forKey: "matrixTrailLength") ?? "Medium" }
+        set { defaults.set(newValue, forKey: "matrixTrailLength") }
+    }
 }
 
 // MARK: - Slider Menu Item View
@@ -314,6 +639,8 @@ enum PlayMode {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    static let matrixRainSentinel = "##MATRIX_RAIN##"
+
     var statusItem: NSStatusItem!
     var screensaverWindows: [ScreensaverWindow] = []
     var contentViews: [ScreensaverContent] = []
@@ -418,12 +745,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Auto play on launch
         if Prefs.autoPlayEnabled, let filename = Prefs.lastMediaFilename {
-            let path = (appFolder as NSString).appendingPathComponent(filename)
-            if FileManager.default.fileExists(atPath: path) {
-                let mode: PlayMode = Prefs.lastPlayMode == "ambient" ? .ambient : .screensaver
-                // Delay slightly so the app finishes launching
+            let mode: PlayMode = Prefs.lastPlayMode == "ambient" ? .ambient : .screensaver
+            if filename == AppDelegate.matrixRainSentinel {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.startPlaying(media: path, on: NSScreen.screens, mode: mode)
+                    self.startPlaying(media: AppDelegate.matrixRainSentinel, on: NSScreen.screens, mode: mode)
+                }
+            } else {
+                let path = (appFolder as NSString).appendingPathComponent(filename)
+                if FileManager.default.fileExists(atPath: path) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.startPlaying(media: path, on: NSScreen.screens, mode: mode)
+                    }
                 }
             }
         }
@@ -516,6 +848,102 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Matrix Rain - built-in effect
+        menu.addItem(NSMenuItem.separator())
+        let matrixItem = NSMenuItem(title: "Matrix Rain", action: nil, keyEquivalent: "")
+        let matrixSubmenu = NSMenu()
+
+        // Matrix settings submenu
+        let settingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        let settingsSubmenu = NSMenu()
+
+        // Color Theme
+        let colorMenu = NSMenu()
+        for theme in MatrixColorTheme.allCases {
+            let item = NSMenuItem(title: theme.rawValue, action: #selector(setMatrixColor(_:)), keyEquivalent: "")
+            item.representedObject = theme.rawValue as AnyObject
+            item.state = Prefs.matrixColorTheme == theme.rawValue ? .on : .off
+            colorMenu.addItem(item)
+        }
+        let colorItem = NSMenuItem(title: "Color Theme", action: nil, keyEquivalent: "")
+        colorItem.submenu = colorMenu
+        settingsSubmenu.addItem(colorItem)
+
+        // Speed
+        let speedMenu = NSMenu()
+        for s in MatrixSpeed.allCases {
+            let item = NSMenuItem(title: s.rawValue, action: #selector(setMatrixSpeed(_:)), keyEquivalent: "")
+            item.representedObject = s.rawValue as AnyObject
+            item.state = Prefs.matrixSpeed == s.rawValue ? .on : .off
+            speedMenu.addItem(item)
+        }
+        let speedItem = NSMenuItem(title: "Speed", action: nil, keyEquivalent: "")
+        speedItem.submenu = speedMenu
+        settingsSubmenu.addItem(speedItem)
+
+        // Characters
+        let charMenu = NSMenu()
+        for cs in MatrixCharacterSet.allCases {
+            let item = NSMenuItem(title: cs.rawValue, action: #selector(setMatrixCharSet(_:)), keyEquivalent: "")
+            item.representedObject = cs.rawValue as AnyObject
+            item.state = Prefs.matrixCharacterSet == cs.rawValue ? .on : .off
+            charMenu.addItem(item)
+        }
+        let charItem = NSMenuItem(title: "Characters", action: nil, keyEquivalent: "")
+        charItem.submenu = charMenu
+        settingsSubmenu.addItem(charItem)
+
+        // Density
+        let densityMenu = NSMenu()
+        for d in MatrixDensity.allCases {
+            let item = NSMenuItem(title: d.rawValue, action: #selector(setMatrixDensity(_:)), keyEquivalent: "")
+            item.representedObject = d.rawValue as AnyObject
+            item.state = Prefs.matrixDensity == d.rawValue ? .on : .off
+            densityMenu.addItem(item)
+        }
+        let densityItem = NSMenuItem(title: "Density", action: nil, keyEquivalent: "")
+        densityItem.submenu = densityMenu
+        settingsSubmenu.addItem(densityItem)
+
+        // Font Size
+        let fontMenu = NSMenu()
+        for f in MatrixFontSize.allCases {
+            let item = NSMenuItem(title: f.rawValue, action: #selector(setMatrixFontSize(_:)), keyEquivalent: "")
+            item.representedObject = f.rawValue as AnyObject
+            item.state = Prefs.matrixFontSize == f.rawValue ? .on : .off
+            fontMenu.addItem(item)
+        }
+        let fontItem = NSMenuItem(title: "Font Size", action: nil, keyEquivalent: "")
+        fontItem.submenu = fontMenu
+        settingsSubmenu.addItem(fontItem)
+
+        // Trail Length
+        let trailMenu = NSMenu()
+        for t in MatrixTrailLength.allCases {
+            let item = NSMenuItem(title: t.rawValue, action: #selector(setMatrixTrailLength(_:)), keyEquivalent: "")
+            item.representedObject = t.rawValue as AnyObject
+            item.state = Prefs.matrixTrailLength == t.rawValue ? .on : .off
+            trailMenu.addItem(item)
+        }
+        let trailItem = NSMenuItem(title: "Trail Length", action: nil, keyEquivalent: "")
+        trailItem.submenu = trailMenu
+        settingsSubmenu.addItem(trailItem)
+
+        settingsItem.submenu = settingsSubmenu
+        matrixSubmenu.addItem(settingsItem)
+        matrixSubmenu.addItem(NSMenuItem.separator())
+
+        // Screen selection for Matrix Rain
+        if hasExternal {
+            addScreenItems(to: matrixSubmenu, file: AppDelegate.matrixRainSentinel, builtIn: builtIn, externals: externals)
+        } else {
+            let playItem = NSMenuItem(title: "Play", action: #selector(playMatrixRainAllScreens), keyEquivalent: "")
+            matrixSubmenu.addItem(playItem)
+        }
+
+        matrixItem.submenu = matrixSubmenu
+        menu.addItem(matrixItem)
+
         menu.addItem(NSMenuItem.separator())
 
         // Sound toggle
@@ -607,6 +1035,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Matrix Rain settings actions
+
+    @objc func setMatrixColor(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.matrixColorTheme = value
+    }
+
+    @objc func setMatrixSpeed(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.matrixSpeed = value
+    }
+
+    @objc func setMatrixCharSet(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.matrixCharacterSet = value
+    }
+
+    @objc func setMatrixDensity(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.matrixDensity = value
+    }
+
+    @objc func setMatrixFontSize(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.matrixFontSize = value
+    }
+
+    @objc func setMatrixTrailLength(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.matrixTrailLength = value
+    }
+
+    @objc func playMatrixRainAllScreens() {
+        startPlaying(media: AppDelegate.matrixRainSentinel, on: NSScreen.screens, mode: .screensaver)
+    }
+
     // MARK: - Screen items submenu
 
     func addScreenItems(to menu: NSMenu, file: String, builtIn: NSScreen?, externals: [NSScreen]) {
@@ -684,21 +1148,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func startPlaying(media: String, on screens: [NSScreen], mode: PlayMode) {
         if isPlaying { stopPlaying() }
 
-        guard FileManager.default.fileExists(atPath: media) else {
-            let alert = NSAlert()
-            alert.messageText = "File Not Found"
-            alert.informativeText = "Could not find media at:\n\(media)"
-            alert.alertStyle = .warning
-            alert.runModal()
-            return
+        let isMatrixRain = (media == AppDelegate.matrixRainSentinel)
+
+        if !isMatrixRain {
+            guard FileManager.default.fileExists(atPath: media) else {
+                let alert = NSAlert()
+                alert.messageText = "File Not Found"
+                alert.informativeText = "Could not find media at:\n\(media)"
+                alert.alertStyle = .warning
+                alert.runModal()
+                return
+            }
         }
 
-        let url = URL(fileURLWithPath: media)
         currentMode = mode
-        nowPlayingName = displayName(for: media)
+        nowPlayingName = isMatrixRain ? "Matrix Rain" : displayName(for: media)
 
         // Save for auto play
-        Prefs.lastMediaFilename = (media as NSString).lastPathComponent
+        if isMatrixRain {
+            Prefs.lastMediaFilename = AppDelegate.matrixRainSentinel
+        } else {
+            Prefs.lastMediaFilename = (media as NSString).lastPathComponent
+        }
         Prefs.lastPlayMode = mode == .ambient ? "ambient" : "screensaver"
 
         activityToken = ProcessInfo.processInfo.beginActivity(
@@ -731,9 +1202,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
             let content: NSView & ScreensaverContent
-            if isGif(media) {
+            if isMatrixRain {
+                content = MatrixRainView(frame: screen.frame)
+            } else if isGif(media) {
+                let url = URL(fileURLWithPath: media)
                 content = GifPlayerView(frame: screen.frame, gifURL: url)
             } else {
+                let url = URL(fileURLWithPath: media)
                 content = VideoPlayerView(
                     frame: screen.frame, videoURL: url,
                     muted: !Prefs.soundEnabled, volume: Prefs.volume,

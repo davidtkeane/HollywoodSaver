@@ -86,9 +86,9 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>2</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>2.0</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSUIElement</key>
@@ -195,6 +195,31 @@ fi
 APP_SIZE=$(du -sh "$APP_DIR" | awk '{print $1}')
 
 echo ""
+# --- Code Signing (auto-detects Developer ID cert) ---
+SIGN_ID=$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+
+if [ -n "$SIGN_ID" ]; then
+    echo ""
+    echo -e "${BLUE}Code signing...${NC}"
+    echo "  Identity: $SIGN_ID"
+
+    codesign --deep --force --verify --verbose \
+        --sign "$SIGN_ID" \
+        --options runtime \
+        "$APP_DIR" 2>&1 | grep -E "replacing|adding|signed" || true
+
+    if codesign --verify --deep --strict "$APP_DIR" 2>/dev/null; then
+        echo -e "  ${GREEN}✅${NC} Signed with Developer ID"
+    else
+        echo -e "  ${YELLOW}⚠️${NC}  Signing failed — app built but unsigned"
+    fi
+else
+    echo ""
+    echo -e "  ${YELLOW}⚠️${NC}  No Developer ID cert found — app built unsigned"
+    echo "     To sign: Xcode → Settings → Accounts → Manage Certificates → + Developer ID Application"
+fi
+
+echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}🎖️  BUILD SUCCESSFUL!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -207,9 +232,15 @@ echo -e "${BLUE}To run:${NC}"
 echo "  open $APP_DIR"
 echo ""
 echo -e "${BLUE}What to expect:${NC}"
-echo "  • Ranger helmet icon appears in menu bar 🎖️"
-echo "  • Click icon to see your videos"
-echo "  • Drop .mp4/.mov/.gif files in this folder"
+echo "  • Ranger helmet icon appears in the menu bar (top-right of screen) 🎖️"
+echo "  • Click the icon to see your videos and Matrix Rain"
+echo "  • Drop .mp4/.mov/.gif files in this folder to add more"
+echo ""
+echo -e "${YELLOW}Where is the icon?${NC}"
+echo "  • M1 Macs: Icon shows on built-in screen AND external screen menu bars"
+echo "  • M3/M4 Macs: If an external monitor is connected, the icon may only"
+echo "    appear on the external screen's menu bar"
+echo "  • No window opens — it's a menu bar app! Look for the icon in the top bar"
 echo ""
 echo -e "${GREEN}Rangers lead the way!${NC}"
 echo ""
