@@ -2,6 +2,13 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [4.1.0] - 2026-02-19
+
+### Changed
+- Version bumped to 4.1.0
+
+---
+
 ## [4.0.0] - 2026-02-19
 
 ### Added
