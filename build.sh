@@ -160,6 +160,7 @@ COMPILE_OUTPUT=$(swiftc \
     -framework QuartzCore \
     -framework ImageIO \
     -framework ServiceManagement \
+    -framework IOKit \
     -o "$APP_DIR/Contents/MacOS/HollywoodSaver" \
     "$SCRIPT_DIR/HollywoodSaver.swift" 2>&1)
 

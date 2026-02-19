@@ -4,6 +4,11 @@ All notable changes to HollywoodSaver are documented here.
 
 ## [4.0.0] - 2026-02-19
 
+### Added
+- **Sleep Now** — put your Mac to sleep instantly from the menu
+- **Sleep Timer** — sleep after 90/60/45/30/15 minutes or custom duration, with 5-min and 1-min warnings
+- **Sleep After Playback** — Mac sleeps automatically when the current video/GIF finishes
+
 ### Changed
 - Version bumped to 4.0.0
 

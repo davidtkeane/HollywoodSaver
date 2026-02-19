@@ -4,6 +4,7 @@ import QuartzCore
 import ImageIO
 import ServiceManagement
 import CryptoKit
+import IOKit.pwr_mgt
 
 // MARK: - Custom Window (borderless windows need this to receive key events)
 
@@ -1046,6 +1047,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var currentMediaPath: String?
     var savedMediaBeforeBreak: String?
     var savedModeBeforeBreak: PlayMode?
+    var sleepTimer: Timer?
+    var sleepEndDate: Date?
+    var sleepAfterPlayback = false
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1453,6 +1457,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
         menu.addItem(desktopItem)
 
+        // Sleep
+        menu.addItem(NSMenuItem.separator())
+        let sleepItem = NSMenuItem(title: "Sleep", action: nil, keyEquivalent: "")
+        let sleepSubmenu = NSMenu(title: "Sleep")
+
+        if let endDate = sleepEndDate {
+            let remaining = max(0, Int(endDate.timeIntervalSinceNow))
+            let mins = remaining / 60
+            let secs = remaining % 60
+            let countdownItem = NSMenuItem(title: String(format: "  Sleep in %d:%02d", mins, secs), action: nil, keyEquivalent: "")
+            countdownItem.isEnabled = false
+            sleepSubmenu.addItem(countdownItem)
+            let cancelItem = NSMenuItem(title: "Cancel Sleep Timer", action: #selector(cancelSleepTimer), keyEquivalent: "")
+            sleepSubmenu.addItem(cancelItem)
+        } else {
+            let sleepNowItem = NSMenuItem(title: "Sleep Now", action: #selector(sleepNow), keyEquivalent: "")
+            sleepSubmenu.addItem(sleepNowItem)
+
+            sleepSubmenu.addItem(NSMenuItem.separator())
+
+            for minutes in [90, 60, 45, 30, 15] {
+                let item = NSMenuItem(title: "Sleep in \(minutes) min", action: #selector(startSleepTimer(_:)), keyEquivalent: "")
+                item.representedObject = minutes as AnyObject
+                sleepSubmenu.addItem(item)
+            }
+            let customSleepItem = NSMenuItem(title: "Custom...", action: #selector(startCustomSleepTimer), keyEquivalent: "")
+            sleepSubmenu.addItem(customSleepItem)
+        }
+
+        sleepSubmenu.addItem(NSMenuItem.separator())
+        let sleepAfterItem = NSMenuItem(title: "Sleep After Playback", action: #selector(toggleSleepAfterPlayback), keyEquivalent: "")
+        sleepAfterItem.state = sleepAfterPlayback ? .on : .off
+        sleepAfterItem.isEnabled = isPlaying || sleepAfterPlayback
+        sleepSubmenu.addItem(sleepAfterItem)
+
+        sleepItem.submenu = sleepSubmenu
+        menu.addItem(sleepItem)
+
         // Break Reminder
         menu.addItem(NSMenuItem.separator())
         let breakItem = NSMenuItem(title: "Break Reminder", action: nil, keyEquivalent: "")
@@ -1733,6 +1775,74 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    // MARK: - Sleep
+
+    func putMacToSleep() {
+        stopPlaying()
+        let port = IOPMFindPowerManagement(mach_port_t(MACH_PORT_NULL))
+        IOPMSleepSystem(port)
+        IOServiceClose(port)
+    }
+
+    @objc func sleepNow() {
+        putMacToSleep()
+    }
+
+    @objc func startSleepTimer(_ sender: NSMenuItem) {
+        guard let minutes = sender.representedObject as? Int else { return }
+        startSleepWithMinutes(minutes)
+    }
+
+    @objc func startCustomSleepTimer() {
+        let alert = NSAlert()
+        alert.messageText = "Sleep Timer"
+        alert.informativeText = "Enter minutes until sleep:"
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
+        input.stringValue = "30"
+        alert.accessoryView = input
+        alert.addButton(withTitle: "Start")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            if let mins = Int(input.stringValue), mins > 0 {
+                startSleepWithMinutes(mins)
+            }
+        }
+    }
+
+    func startSleepWithMinutes(_ minutes: Int) {
+        cancelSleepTimer()
+        sleepEndDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
+
+        sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
+            guard let self = self, let endDate = self.sleepEndDate else {
+                timer.invalidate()
+                return
+            }
+            let remaining = Int(endDate.timeIntervalSinceNow)
+            if remaining <= 0 {
+                timer.invalidate()
+                self.sleepTimer = nil
+                self.sleepEndDate = nil
+                self.putMacToSleep()
+            } else if remaining == 300 {
+                self.sendBreakNotification(title: "Sleep Timer", body: "Mac will sleep in 5 minutes")
+            } else if remaining == 60 {
+                self.sendBreakNotification(title: "Sleep Timer", body: "Mac will sleep in 1 minute")
+            }
+        }
+    }
+
+    @objc func cancelSleepTimer() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepEndDate = nil
+        sleepAfterPlayback = false
+    }
+
+    @objc func toggleSleepAfterPlayback() {
+        sleepAfterPlayback = !sleepAfterPlayback
     }
 
     @objc func openBuyMeACoffee() {
@@ -2718,6 +2828,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         setMenuBarIcon(symbolName: "play.rectangle.fill")
+
+        // Sleep after playback if enabled
+        if sleepAfterPlayback {
+            sleepAfterPlayback = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.putMacToSleep()
+            }
+        }
     }
 }
 
