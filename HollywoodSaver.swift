@@ -639,6 +639,10 @@ class Prefs {
         get { defaults.object(forKey: "breakScreenEnabled") != nil ? defaults.bool(forKey: "breakScreenEnabled") : true }
         set { defaults.set(newValue, forKey: "breakScreenEnabled") }
     }
+    static var resumeAfterBreak: Bool {
+        get { defaults.object(forKey: "resumeAfterBreak") != nil ? defaults.bool(forKey: "resumeAfterBreak") : true }
+        set { defaults.set(newValue, forKey: "resumeAfterBreak") }
+    }
     static var pomodoroWork: Int {
         get { let v = defaults.integer(forKey: "pomodoroWork"); return v > 0 ? v : 25 }
         set { defaults.set(newValue, forKey: "pomodoroWork") }
@@ -1031,6 +1035,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var countdownWindows: [NSWindow] = []
     var pomodoroActive = false
     var pomodoroOnBreak = false
+    var currentMediaPath: String?
+    var savedMediaBeforeBreak: String?
+    var savedModeBeforeBreak: PlayMode?
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1543,6 +1550,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         breakScreenItem.state = Prefs.breakScreenEnabled ? .on : .off
         breakSubmenu.addItem(breakScreenItem)
 
+        let resumeItem = NSMenuItem(title: "Resume Playback After Break", action: #selector(toggleResumeAfterBreak), keyEquivalent: "")
+        resumeItem.state = Prefs.resumeAfterBreak ? .on : .off
+        breakSubmenu.addItem(resumeItem)
+
         // Countdown overlay settings
         breakSubmenu.addItem(NSMenuItem.separator())
 
@@ -1972,6 +1983,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Prefs.breakScreenEnabled = !Prefs.breakScreenEnabled
     }
 
+    @objc func toggleResumeAfterBreak() {
+        Prefs.resumeAfterBreak = !Prefs.resumeAfterBreak
+    }
+
     @objc func setBreakSound(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.breakSoundName = value
@@ -2143,6 +2158,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Skip if lock screen is active
         guard !lockScreenActive else { return }
 
+        // Save current playback state for resume after break
+        if isPlaying {
+            savedMediaBeforeBreak = currentMediaPath
+            savedModeBeforeBreak = currentMode
+            stopPlaying()
+        }
+
         // Remove floating countdown overlay (break screen replaces it)
         hideCountdownOverlay()
 
@@ -2225,6 +2247,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 pomodoroOnBreak = true
                 startBreakWithMinutes(Prefs.pomodoroBreak)
             }
+        }
+
+        // Resume playback if it was active before break
+        if Prefs.resumeAfterBreak, let media = savedMediaBeforeBreak, let mode = savedModeBeforeBreak {
+            savedMediaBeforeBreak = nil
+            savedModeBeforeBreak = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.startPlaying(media: media, on: NSScreen.screens, mode: mode)
+            }
+        } else {
+            savedMediaBeforeBreak = nil
+            savedModeBeforeBreak = nil
         }
     }
 
@@ -2531,6 +2565,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         currentMode = mode
+        currentMediaPath = media
         nowPlayingName = isMatrixRain ? "Matrix Rain" : displayName(for: media)
 
         // Save for auto play
@@ -2621,6 +2656,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         contentViews.removeAll()
         inputMonitor = nil
         currentMode = nil
+        currentMediaPath = nil
         nowPlayingName = nil
 
         if let token = activityToken {

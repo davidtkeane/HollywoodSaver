@@ -13,6 +13,7 @@ All notable changes to HollywoodSaver are documented here.
 - **Pomodoro mode** — auto-cycling work/break timer (configurable work 15-50 min, break 3-15 min)
 - **Session stats** — tracks breaks taken today and total, shown in Break Reminder menu
 - **Break Screen toggle** — disable fullscreen break overlay for countdown-only mode (sound + notification still fire)
+- **Resume Playback After Break** — automatically resumes screensaver/ambient playback after break screen dismisses (enabled by default, toggle in menu)
 
 ### Changed
 - Version bumped to 3.4.0
