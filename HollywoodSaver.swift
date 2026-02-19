@@ -620,6 +620,10 @@ class Prefs {
         get { defaults.object(forKey: "rainBehindOpacity") != nil ? defaults.float(forKey: "rainBehindOpacity") : 1.0 }
         set { defaults.set(newValue, forKey: "rainBehindOpacity") }
     }
+    static var rainScreen: String {
+        get { defaults.string(forKey: "rainScreen") ?? "all" }
+        set { defaults.set(newValue, forKey: "rainScreen") }
+    }
 
     // Break reminder
     static var breakDuration: Int {
@@ -1050,7 +1054,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "4.6.0"
+    static let appVersion = "4.7.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -1527,6 +1531,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let rainOverOpacityItem = NSMenuItem()
         rainOverOpacityItem.view = rainOverOpacityView
         rainSubmenu.addItem(rainOverOpacityItem)
+
+        // Display selection for rain effects
+        rainSubmenu.addItem(NSMenuItem.separator())
+        let rainDisplayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
+        let rainDisplaySubmenu = NSMenu(title: "Display")
+        for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
+            let item = NSMenuItem(title: label, action: #selector(setRainScreen(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.rainScreen == value ? .on : .off
+            rainDisplaySubmenu.addItem(item)
+        }
+        rainDisplayItem.submenu = rainDisplaySubmenu
+        rainSubmenu.addItem(rainDisplayItem)
 
         // Stop All Rain (only show when at least one rain mode is active)
         if !rainBehindWindows.isEmpty || !rainOverlayWindows.isEmpty {
@@ -3186,9 +3203,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func startRainOverlay() {
         stopRainOverlay()
-        guard let screens = NSScreen.screens as [NSScreen]? else { return }
+        let allScreens = NSScreen.screens
+        let builtIn = allScreens.first { $0.localizedName.contains("Built") }
+        let externals = allScreens.filter { !$0.localizedName.contains("Built") }
+        let targetScreens: [NSScreen]
+        switch Prefs.rainScreen {
+        case "builtin": targetScreens = builtIn.map { [$0] } ?? allScreens
+        case "external": targetScreens = externals.isEmpty ? allScreens : externals
+        default: targetScreens = allScreens
+        }
 
-        for screen in screens {
+        for screen in targetScreens {
             let window = NSWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
@@ -3235,9 +3260,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func startRainBehind() {
         stopRainBehind()
-        guard let screens = NSScreen.screens as [NSScreen]? else { return }
+        let allScreens = NSScreen.screens
+        let builtIn = allScreens.first { $0.localizedName.contains("Built") }
+        let externals = allScreens.filter { !$0.localizedName.contains("Built") }
+        let targetScreens: [NSScreen]
+        switch Prefs.rainScreen {
+        case "builtin": targetScreens = builtIn.map { [$0] } ?? allScreens
+        case "external": targetScreens = externals.isEmpty ? allScreens : externals
+        default: targetScreens = allScreens
+        }
 
-        for screen in screens {
+        for screen in targetScreens {
             let window = NSWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
@@ -3283,6 +3316,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func stopAllRainEffects() {
         if !rainOverlayWindows.isEmpty { stopRainOverlay() }
         if !rainBehindWindows.isEmpty { stopRainBehind() }
+    }
+
+    @objc func setRainScreen(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.rainScreen = value
+        if !rainBehindWindows.isEmpty { startRainBehind() }
+        if !rainOverlayWindows.isEmpty { startRainOverlay() }
     }
 }
 

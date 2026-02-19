@@ -2,6 +2,14 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [4.7.0] - 2026-02-19
+
+### Added
+- **Rain Effects Display Selection** — choose which screen(s) to show rain on: All Screens, Built-in, or External (one shared setting for both rain modes)
+- Rain restarts immediately on the selected screen(s) when changed
+
+---
+
 ## [4.6.0] - 2026-02-19
 
 ### Changed
