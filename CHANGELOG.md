@@ -2,6 +2,19 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [4.5.0] - 2026-02-19
+
+### Added
+- **Rain Effects** submenu with two independent Matrix Rain modes:
+  - **Rain Behind Windows** — Matrix Rain as your desktop wallpaper (behind all windows and icons)
+  - **Rain Over Windows** — transparent Matrix Rain overlay falling in front of everything while you keep working, fully click-through
+  - Both can run simultaneously or independently
+  - Each has its own opacity slider (Behind: 0.1–1.0, Over: 0.05–0.5)
+  - Both auto-restore on app relaunch
+  - Works across all screens and Spaces
+
+---
+
 ## [4.4.0] - 2026-02-19
 
 ### Security

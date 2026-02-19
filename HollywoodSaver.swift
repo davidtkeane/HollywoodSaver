@@ -603,6 +603,24 @@ class Prefs {
         set { defaults.set(newValue, forKey: "matrixTrailLength") }
     }
 
+    // Rain Effects
+    static var rainOverlayEnabled: Bool {
+        get { defaults.bool(forKey: "rainOverlayEnabled") }
+        set { defaults.set(newValue, forKey: "rainOverlayEnabled") }
+    }
+    static var rainOverlayOpacity: Float {
+        get { defaults.object(forKey: "rainOverlayOpacity") != nil ? defaults.float(forKey: "rainOverlayOpacity") : 0.15 }
+        set { defaults.set(newValue, forKey: "rainOverlayOpacity") }
+    }
+    static var rainBehindEnabled: Bool {
+        get { defaults.bool(forKey: "rainBehindEnabled") }
+        set { defaults.set(newValue, forKey: "rainBehindEnabled") }
+    }
+    static var rainBehindOpacity: Float {
+        get { defaults.object(forKey: "rainBehindOpacity") != nil ? defaults.float(forKey: "rainBehindOpacity") : 1.0 }
+        set { defaults.set(newValue, forKey: "rainBehindOpacity") }
+    }
+
     // Break reminder
     static var breakDuration: Int {
         get { let v = defaults.integer(forKey: "breakDuration"); return v > 0 ? v : 60 }
@@ -1032,7 +1050,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "4.4.0"
+    static let appVersion = "4.5.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -1063,6 +1081,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var savedModeBeforeSleep: PlayMode?
     var latestReleaseZipURL: String?
     var latestReleaseChecksumURL: String?
+    var rainOverlayWindows: [NSWindow] = []
+    var rainOverlayViews: [ScreensaverContent] = []
+    var rainBehindWindows: [NSWindow] = []
+    var rainBehindViews: [ScreensaverContent] = []
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1192,6 +1214,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         self.startPlaying(media: path, on: NSScreen.screens, mode: mode)
                     }
                 }
+            }
+        }
+
+        // Restore rain effects if they were enabled
+        if Prefs.rainBehindEnabled || Prefs.rainOverlayEnabled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if Prefs.rainBehindEnabled { self.startRainBehind() }
+                if Prefs.rainOverlayEnabled { self.startRainOverlay() }
             }
         }
 
@@ -1461,6 +1491,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let opacityMenuItem = NSMenuItem()
         opacityMenuItem.view = opacityView
         menu.addItem(opacityMenuItem)
+
+        // Rain Effects submenu
+        let rainItem = NSMenuItem(title: "Rain Effects", action: nil, keyEquivalent: "")
+        let rainSubmenu = NSMenu(title: "Rain Effects")
+
+        // Rain Behind Windows toggle
+        let rainBehindToggle = NSMenuItem(title: "Rain Behind Windows", action: #selector(toggleRainBehind), keyEquivalent: "")
+        rainBehindToggle.state = !rainBehindWindows.isEmpty ? .on : .off
+        rainSubmenu.addItem(rainBehindToggle)
+
+        let rainBehindOpacityView = SliderMenuView(title: "Behind Opacity", minValue: 0.1, maxValue: 1, currentValue: Double(Prefs.rainBehindOpacity)) { newVal in
+            Prefs.rainBehindOpacity = newVal
+            for w in self.rainBehindWindows {
+                w.alphaValue = CGFloat(newVal)
+            }
+        }
+        let rainBehindOpacityItem = NSMenuItem()
+        rainBehindOpacityItem.view = rainBehindOpacityView
+        rainSubmenu.addItem(rainBehindOpacityItem)
+
+        rainSubmenu.addItem(NSMenuItem.separator())
+
+        // Rain Over Windows toggle
+        let rainOverToggle = NSMenuItem(title: "Rain Over Windows", action: #selector(toggleRainOverlay), keyEquivalent: "")
+        rainOverToggle.state = !rainOverlayWindows.isEmpty ? .on : .off
+        rainSubmenu.addItem(rainOverToggle)
+
+        let rainOverOpacityView = SliderMenuView(title: "Over Opacity", minValue: 0.05, maxValue: 0.5, currentValue: Double(Prefs.rainOverlayOpacity)) { newVal in
+            Prefs.rainOverlayOpacity = newVal
+            for w in self.rainOverlayWindows {
+                w.alphaValue = CGFloat(newVal)
+            }
+        }
+        let rainOverOpacityItem = NSMenuItem()
+        rainOverOpacityItem.view = rainOverOpacityView
+        rainSubmenu.addItem(rainOverOpacityItem)
+
+        // Stop All Rain (only show when at least one rain mode is active)
+        if !rainBehindWindows.isEmpty || !rainOverlayWindows.isEmpty {
+            rainSubmenu.addItem(NSMenuItem.separator())
+            let stopAllRain = NSMenuItem(title: "Stop All Rain", action: #selector(stopAllRainEffects), keyEquivalent: "")
+            rainSubmenu.addItem(stopAllRain)
+        }
+
+        rainItem.submenu = rainSubmenu
+        menu.addItem(rainItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -3104,6 +3180,109 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.putMacToSleep()
             }
         }
+    }
+
+    // MARK: - Rain Overlay
+
+    func startRainOverlay() {
+        stopRainOverlay()
+        guard let screens = NSScreen.screens as [NSScreen]? else { return }
+
+        for screen in screens {
+            let window = NSWindow(
+                contentRect: screen.frame,
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .floating
+            window.ignoresMouseEvents = true
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = false
+            window.alphaValue = CGFloat(Prefs.rainOverlayOpacity)
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+
+            let matrixView = MatrixRainView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            window.contentView = matrixView
+            window.orderFrontRegardless()
+            matrixView.startPlayback()
+
+            rainOverlayWindows.append(window)
+            rainOverlayViews.append(matrixView)
+        }
+
+        Prefs.rainOverlayEnabled = true
+    }
+
+    func stopRainOverlay() {
+        for view in rainOverlayViews { view.stopPlayback() }
+        for window in rainOverlayWindows { window.orderOut(nil) }
+        rainOverlayWindows.removeAll()
+        rainOverlayViews.removeAll()
+        Prefs.rainOverlayEnabled = false
+    }
+
+    @objc func toggleRainOverlay() {
+        if rainOverlayWindows.isEmpty {
+            startRainOverlay()
+        } else {
+            stopRainOverlay()
+        }
+    }
+
+    // MARK: - Rain Behind Windows
+
+    func startRainBehind() {
+        stopRainBehind()
+        guard let screens = NSScreen.screens as [NSScreen]? else { return }
+
+        for screen in screens {
+            let window = NSWindow(
+                contentRect: screen.frame,
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .init(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+            window.ignoresMouseEvents = true
+            window.isOpaque = false
+            window.backgroundColor = .black
+            window.hasShadow = false
+            window.alphaValue = CGFloat(Prefs.rainBehindOpacity)
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let matrixView = MatrixRainView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            window.contentView = matrixView
+            window.orderFrontRegardless()
+            matrixView.startPlayback()
+
+            rainBehindWindows.append(window)
+            rainBehindViews.append(matrixView)
+        }
+
+        Prefs.rainBehindEnabled = true
+    }
+
+    func stopRainBehind() {
+        for view in rainBehindViews { view.stopPlayback() }
+        for window in rainBehindWindows { window.orderOut(nil) }
+        rainBehindWindows.removeAll()
+        rainBehindViews.removeAll()
+        Prefs.rainBehindEnabled = false
+    }
+
+    @objc func toggleRainBehind() {
+        if rainBehindWindows.isEmpty {
+            startRainBehind()
+        } else {
+            stopRainBehind()
+        }
+    }
+
+    @objc func stopAllRainEffects() {
+        if !rainOverlayWindows.isEmpty { stopRainOverlay() }
+        if !rainBehindWindows.isEmpty { stopRainBehind() }
     }
 }
 

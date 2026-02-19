@@ -33,7 +33,9 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Lock Screen** | Password-protected screen lock — Cmd+Shift+L to lock, SHA-256 hashed password |
 | **Show in Dock** | Toggle the app icon in the macOS Dock so you can see it alongside your other apps |
 | **Desktop Shortcut** | Create a shortcut on your Desktop — never forget you have HollywoodSaver |
+| **Rain Effects** | Two independent Matrix Rain modes — behind windows (wallpaper) and over windows (transparent overlay). Both fully click-through, with separate opacity sliders. Run one, the other, or both at once |
 | **Sleep Timer** | Put your Mac to sleep now, after a timer (90/60/45/30/15 min), or after playback ends — resumes playback on wake |
+| **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
 ## Quick Start
@@ -98,6 +100,23 @@ The real magic happens when you combine **Ambient Mode** with the **Opacity slid
 
 This works with any media — videos, GIFs, and built-in effects all become live wallpapers. On a dual-monitor setup, both screens get the effect simultaneously.
 
+## Rain Effects
+
+The **Rain Effects** submenu gives you two independent Matrix Rain modes:
+
+| Mode | What It Does |
+|------|-------------|
+| **Rain Behind Windows** | Matrix Rain falls behind all your windows and icons — like an animated desktop wallpaper |
+| **Rain Over Windows** | Transparent Matrix Rain falls in front of everything — fully click-through, you keep working while it rains code |
+
+- Both modes can run **simultaneously** or independently
+- Each has its **own opacity slider** (Behind: 0.1–1.0, Over: 0.05–0.5)
+- **Stop All Rain** button to quickly turn everything off
+- Both **auto-restore** when you relaunch the app
+- Works across **all screens and Spaces**
+
+**Try this:** Enable "Rain Over Windows" at low opacity (0.10–0.15) and keep coding. It's like working on a computer while looking through a rain-streaked window. Then add "Rain Behind Windows" too for the full immersion.
+
 ## How It Works
 
 Click the helmet icon (or play icon) in your menu bar to see all your videos listed. Each video gives you options:
@@ -113,6 +132,7 @@ All settings are in the dropdown menu and persist between restarts:
 - **Sound** — toggle audio on/off
 - **Volume** — drag the slider
 - **Opacity** — transparency for ambient mode
+- **Rain Effects** — rain behind windows, over windows, or both (with separate opacity sliders)
 - **Loop** — repeat forever or play once
 - **Auto Play on Launch** — resume the last video automatically
 - **Launch at Login** — start with macOS
@@ -131,8 +151,9 @@ Then just open the app. Works on any Apple Silicon Mac (M1-M4) running macOS 15+
 
 ```
 HollywoodSaver/
-  HollywoodSaver.swift    # All app logic (~2080 lines)
+  HollywoodSaver.swift    # All app logic (~3000 lines)
   build.sh                # Build script — creates the .app bundle
+  release.sh              # Creates GitHub Releases with SHA-256 checksums
   run.sh                  # Launcher with terminal info
   ranger.png              # Custom menu bar + app icon
   videos/                 # Drop .mp4, .mov, .m4v files here
