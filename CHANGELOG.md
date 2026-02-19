@@ -2,7 +2,10 @@
 
 All notable changes to HollywoodSaver are documented here.
 
-## [4.8.0] - 2026-02-19
+## [4.8.0] - 2026-02-19 — FINAL FREE VERSION
+
+> **This is the last free release.** v5.0.0 begins the Pro version journey with registration,
+> advanced features, and the Rangers token ecosystem. Everything in v4.8.0 remains free forever.
 
 ### Added
 - **Floating Clock Overlay** — always-on-top, click-through clock displaying current time
@@ -13,6 +16,18 @@ All notable changes to HollywoodSaver are documented here.
 - **Clock Size** — Compact, Normal, or Large
 - Clock auto-restores on app relaunch
 - Uses system locale for 12hr/24hr time format
+
+### Summary of Free Features (v1.0 → v4.8.0)
+- Screensaver Mode, Ambient Mode, Live Wallpaper Mode (multi-screen)
+- Matrix Rain with full settings (color, speed, density, font, characters, trails)
+- Rain Effects — behind windows + over windows (independent, click-through, auto-restore)
+- Rain Effects screen selection (All/Built-in/External)
+- Floating Clock Overlay (6 colors, 3 sizes, 4 positions, date toggle, screen selection)
+- Break Reminder with Pomodoro mode, countdown overlay, session stats, break sound
+- Lock Screen with SHA-256 password hashing
+- Sleep Timer (Now/Scheduled/After Playback) with countdown overlay, resume on wake
+- Secure auto-update via GitHub Releases + SHA-256 checksum verification
+- Hardened Runtime, input validation, portable design, launch at login, auto play
 
 ---
 

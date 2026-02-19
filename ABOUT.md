@@ -1,6 +1,6 @@
 # About HollywoodSaver
 
-**Version:** 4.6.0
+**Version:** 4.8.0 (Final Free Version)
 **Platform:** macOS 15+ (Apple Silicon — M1/M2/M3/M4)
 **License:** MIT
 **Source:** Single Swift file (~3000 lines), compiled with `swiftc` — no Xcode project
@@ -25,6 +25,7 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 | **Matrix Rain** | Built-in Matrix digital rain effect — no video file needed |
 | **Matrix Settings** | Color theme, speed, characters, density, font size, trail length |
 | **Rain Effects** | Two independent Matrix Rain modes — behind windows (wallpaper) and over windows (transparent overlay). Both fully click-through, with separate opacity sliders |
+| **Floating Clock** | Always-on-top clock overlay — 6 colors, 3 sizes, 4 corner positions, optional date, screen selection, auto-restore |
 | **Break Reminder** | Countdown timer (60/45/30/15 min or custom) with fullscreen break screen overlay |
 | **Floating Countdown** | On-screen countdown widget — choose screen, corner, color, and size |
 | **Pomodoro Mode** | Auto-cycling work/break timer with configurable durations |
@@ -50,6 +51,8 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 
 | Version | Highlights |
 |---------|-----------|
+| **v4.8.0** | **FINAL FREE VERSION** — Floating Clock Overlay (6 colors, 3 sizes, 4 corners, date toggle, screen selection) |
+| **v4.7.0** | Rain Effects screen selection (All Screens, Built-in, External) |
 | **v4.6.0** | Version bump, updated ABOUT with full feature list |
 | **v4.5.0** | Rain Effects — Rain Behind Windows + Rain Over Windows, independent toggles, separate opacity, Stop All Rain, auto-restore |
 | **v4.4.0** | Secure auto-update (SHA-256), Hardened Runtime, input validation, release.sh |

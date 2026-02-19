@@ -35,8 +35,11 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Desktop Shortcut** | Create a shortcut on your Desktop — never forget you have HollywoodSaver |
 | **Rain Effects** | Two independent Matrix Rain modes — behind windows (wallpaper) and over windows (transparent overlay). Both fully click-through, with separate opacity sliders. Run one, the other, or both at once |
 | **Sleep Timer** | Put your Mac to sleep now, after a timer (90/60/45/30/15 min), or after playback ends — resumes playback on wake |
+| **Floating Clock** | Always-on-top clock overlay — 6 colors, 3 sizes, 4 corners, optional date, screen selection, auto-restore |
 | **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
+
+> **v4.8.0 is the final free version.** All features above are free forever. v5.0.0 will begin the Pro journey with registration, advanced features, and the Rangers token ecosystem.
 
 ## Quick Start
 
@@ -218,7 +221,7 @@ MIT — do whatever you want with it.
 
 **Built with:**
 - **[Claude Code](https://claude.ai/claude-code)** — AI pair programming
-- **AIRanger** (Claude Sonnet 4.5) — Your AI Ops Commander 🎖️
+- **AIRanger** (Claude Opus 4.6) — Your AI Ops Commander 🎖️
 
 **Part of the Rangers ecosystem:**
 - 🪙 [H3LLCOIN](https://h3llcoin.com/) — Cryptocurrency for Rangers
