@@ -643,6 +643,14 @@ class Prefs {
         get { defaults.object(forKey: "resumeAfterBreak") != nil ? defaults.bool(forKey: "resumeAfterBreak") : true }
         set { defaults.set(newValue, forKey: "resumeAfterBreak") }
     }
+    static var showDockIcon: Bool {
+        get { defaults.bool(forKey: "showDockIcon") }
+        set { defaults.set(newValue, forKey: "showDockIcon") }
+    }
+    static var showDesktopShortcut: Bool {
+        get { defaults.bool(forKey: "showDesktopShortcut") }
+        set { defaults.set(newValue, forKey: "showDesktopShortcut") }
+    }
     static var pomodoroWork: Int {
         get { let v = defaults.integer(forKey: "pomodoroWork"); return v > 0 ? v : 25 }
         set { defaults.set(newValue, forKey: "pomodoroWork") }
@@ -1129,7 +1137,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(Prefs.showDockIcon ? .regular : .accessory)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
@@ -1169,6 +1177,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+
+        // Sync desktop shortcut on launch
+        syncDesktopShortcut()
     }
 
     var isPlaying: Bool { currentMode != nil }
@@ -1432,6 +1443,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = Prefs.launchAtLogin ? .on : .off
         menu.addItem(loginItem)
 
+        // Show in Dock
+        let dockItem = NSMenuItem(title: "Show in Dock", action: #selector(toggleDockIcon), keyEquivalent: "")
+        dockItem.state = Prefs.showDockIcon ? .on : .off
+        menu.addItem(dockItem)
+
+        // Desktop Shortcut
+        let desktopItem = NSMenuItem(title: "Desktop Shortcut", action: #selector(toggleDesktopShortcut), keyEquivalent: "")
+        desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
+        menu.addItem(desktopItem)
+
         // Break Reminder
         menu.addItem(NSMenuItem.separator())
         let breakItem = NSMenuItem(title: "Break Reminder", action: nil, keyEquivalent: "")
@@ -1678,6 +1699,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 // Silently fail — user can retry
                 Prefs.launchAtLogin = !Prefs.launchAtLogin
+            }
+        }
+    }
+
+    @objc func toggleDockIcon() {
+        Prefs.showDockIcon = !Prefs.showDockIcon
+        NSApp.setActivationPolicy(Prefs.showDockIcon ? .regular : .accessory)
+    }
+
+    @objc func toggleDesktopShortcut() {
+        Prefs.showDesktopShortcut = !Prefs.showDesktopShortcut
+        syncDesktopShortcut()
+    }
+
+    func syncDesktopShortcut() {
+        let desktop = (NSHomeDirectory() as NSString).appendingPathComponent("Desktop")
+        let shortcutPath = (desktop as NSString).appendingPathComponent("HollywoodSaver.app")
+        let fm = FileManager.default
+
+        if Prefs.showDesktopShortcut {
+            // Create symbolic link to .app on Desktop
+            if !fm.fileExists(atPath: shortcutPath) {
+                let appPath = Bundle.main.bundlePath
+                try? fm.createSymbolicLink(atPath: shortcutPath, withDestinationPath: appPath)
+            }
+        } else {
+            // Remove shortcut if it exists and is a symlink
+            if fm.fileExists(atPath: shortcutPath) {
+                if let attrs = try? fm.attributesOfItem(atPath: shortcutPath),
+                   attrs[.type] as? FileAttributeType == .typeSymbolicLink {
+                    try? fm.removeItem(atPath: shortcutPath)
+                }
             }
         }
     }

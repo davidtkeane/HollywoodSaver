@@ -31,6 +31,8 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Break Sound** | Audible alert when break time arrives — 6 system sounds to choose from |
 | **Session Stats** | Track breaks taken today and total — visible in the menu |
 | **Lock Screen** | Password-protected screen lock — Cmd+Shift+L to lock, SHA-256 hashed password |
+| **Show in Dock** | Toggle the app icon in the macOS Dock so you can see it alongside your other apps |
+| **Desktop Shortcut** | Create a shortcut on your Desktop — never forget you have HollywoodSaver |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
 ## Quick Start

@@ -14,6 +14,8 @@ All notable changes to HollywoodSaver are documented here.
 - **Session stats** — tracks breaks taken today and total, shown in Break Reminder menu
 - **Break Screen toggle** — disable fullscreen break overlay for countdown-only mode (sound + notification still fire)
 - **Resume Playback After Break** — automatically resumes screensaver/ambient playback after break screen dismisses (enabled by default, toggle in menu)
+- **Show in Dock** — toggle to show/hide HollywoodSaver icon in the macOS Dock (off by default)
+- **Desktop Shortcut** — toggle to create/remove a shortcut on your Desktop so you remember the app is there
 
 ### Changed
 - Version bumped to 3.4.0
