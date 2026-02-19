@@ -1032,7 +1032,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "4.3.0"
+    static let appVersion = "4.4.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -1061,6 +1061,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sleepCountdownWindows: [NSWindow] = []
     var savedMediaBeforeSleep: String?
     var savedModeBeforeSleep: PlayMode?
+    var latestReleaseZipURL: String?
+    var latestReleaseChecksumURL: String?
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1848,7 +1850,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Start")
         alert.addButton(withTitle: "Cancel")
         if alert.runModal() == .alertFirstButtonReturn {
-            if let mins = Int(input.stringValue), mins > 0 {
+            if let mins = Int(input.stringValue), mins > 0, mins <= 1440 {
                 startSleepWithMinutes(mins)
             }
         }
@@ -2020,6 +2022,71 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Use Releases API (secure: provides pre-built assets with checksums)
+        let urlString = "https://api.github.com/repos/\(AppDelegate.githubRepo)/releases/latest"
+        guard let url = URL(string: urlString) else {
+            // Fallback to tags API if releases URL fails
+            checkForUpdatesFallback()
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            guard let data = data, error == nil else {
+                // Fallback to tags API on network error
+                DispatchQueue.main.async { self.checkForUpdatesFallback() }
+                return
+            }
+
+            // Try parsing as a single release object
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String else {
+                // No releases found — fallback to tags
+                DispatchQueue.main.async { self.checkForUpdatesFallback() }
+                return
+            }
+
+            let remoteVersion = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+
+            // Parse release assets for .app.zip and .sha256
+            var zipURL: String?
+            var checksumURL: String?
+            if let assets = json["assets"] as? [[String: Any]] {
+                for asset in assets {
+                    guard let name = asset["name"] as? String,
+                          let downloadURL = asset["browser_download_url"] as? String else { continue }
+                    if name.hasSuffix(".app.zip") { zipURL = downloadURL }
+                    if name.hasSuffix(".sha256") { checksumURL = downloadURL }
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.latestVersion = remoteVersion
+                self.latestReleaseZipURL = zipURL
+                self.latestReleaseChecksumURL = checksumURL
+                Prefs.cachedLatestVersion = remoteVersion
+                Prefs.lastVersionCheckDate = Date().timeIntervalSince1970
+
+                // Send notification if newer version found (once per version)
+                if self.isNewerVersion(remoteVersion, than: AppDelegate.appVersion) {
+                    if Prefs.lastNotifiedVersion != remoteVersion {
+                        Prefs.lastNotifiedVersion = remoteVersion
+                        self.sendBreakNotification(
+                            title: "HollywoodSaver Update Available",
+                            body: "v\(AppDelegate.appVersion) → v\(remoteVersion) — Click the menu bar icon to update."
+                        )
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    // Fallback: use Tags API when no GitHub Releases exist yet
+    func checkForUpdatesFallback() {
         let urlString = "https://api.github.com/repos/\(AppDelegate.githubRepo)/tags"
         guard let url = URL(string: urlString) else { return }
 
@@ -2038,10 +2105,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             DispatchQueue.main.async {
                 self.latestVersion = remoteVersion
+                self.latestReleaseZipURL = nil
+                self.latestReleaseChecksumURL = nil
                 Prefs.cachedLatestVersion = remoteVersion
                 Prefs.lastVersionCheckDate = Date().timeIntervalSince1970
 
-                // Send notification if newer version found (once per version)
                 if self.isNewerVersion(remoteVersion, than: AppDelegate.appVersion) {
                     if Prefs.lastNotifiedVersion != remoteVersion {
                         Prefs.lastNotifiedVersion = remoteVersion
@@ -2072,43 +2140,94 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let latest = latestVersion ?? "unknown"
         let alert = NSAlert()
         alert.messageText = "Update Available"
-        alert.informativeText = """
-        Current version: v\(AppDelegate.appVersion)
-        Latest version: v\(latest)
 
-        How to update:
-        1. Open Terminal in the HollywoodSaver folder
-        2. Run: git pull && bash build.sh
-        3. The app will restart automatically
+        let hasRelease = latestReleaseZipURL != nil && latestReleaseChecksumURL != nil
 
-        Or click "Auto Update" to do this automatically.
-        """
+        if hasRelease {
+            alert.informativeText = """
+            Current version: v\(AppDelegate.appVersion)
+            Latest version: v\(latest)
+
+            Click "Auto Update" to download and install the new version.
+            The update is verified with a SHA-256 checksum for security.
+
+            Or visit the GitHub Releases page to download manually.
+            """
+        } else {
+            alert.informativeText = """
+            Current version: v\(AppDelegate.appVersion)
+            Latest version: v\(latest)
+
+            Download the latest version from GitHub Releases:
+            https://github.com/\(AppDelegate.githubRepo)/releases
+
+            Or update from source:
+            cd \(appFolder) && git pull && bash build.sh
+            """
+        }
         alert.alertStyle = .informational
 
-        let gitDir = (appFolder as NSString).appendingPathComponent(".git")
-        let hasGit = FileManager.default.fileExists(atPath: gitDir)
-
-        if hasGit {
+        if hasRelease {
             alert.addButton(withTitle: "Auto Update")
         }
         alert.addButton(withTitle: "Open GitHub")
         alert.addButton(withTitle: "Later")
 
         let response = alert.runModal()
-        if hasGit && response == .alertFirstButtonReturn {
+        if hasRelease && response == .alertFirstButtonReturn {
             performAutoUpdate()
-        } else if (!hasGit && response == .alertFirstButtonReturn) || (hasGit && response == .alertSecondButtonReturn) {
+        } else if (!hasRelease && response == .alertFirstButtonReturn) || (hasRelease && response == .alertSecondButtonReturn) {
             NSWorkspace.shared.open(URL(string: "https://github.com/\(AppDelegate.githubRepo)/releases")!)
         }
     }
 
     @objc func performAutoUpdate() {
+        guard let zipURL = latestReleaseZipURL,
+              let checksumURL = latestReleaseChecksumURL else { return }
         let currentVersion = AppDelegate.appVersion
+        let latest = latestVersion ?? "unknown"
 
         let script = """
         #!/bin/bash
         set -e
         cd "\(appFolder)"
+
+        echo ""
+        echo "========================================="
+        echo "  HollywoodSaver Auto-Update"
+        echo "  v\(currentVersion) → v\(latest)"
+        echo "========================================="
+        echo ""
+
+        # Download release
+        echo "Downloading HollywoodSaver v\(latest)..."
+        curl -L -o /tmp/HollywoodSaver.app.zip "\(zipURL)"
+        curl -L -o /tmp/HollywoodSaver.app.zip.sha256 "\(checksumURL)"
+
+        # Verify checksum
+        echo ""
+        echo "Verifying SHA-256 checksum..."
+        EXPECTED=$(cat /tmp/HollywoodSaver.app.zip.sha256 | awk '{print $1}')
+        ACTUAL=$(shasum -a 256 /tmp/HollywoodSaver.app.zip | awk '{print $1}')
+
+        if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo ""
+            echo "╔══════════════════════════════════════╗"
+            echo "║  CHECKSUM MISMATCH — UPDATE ABORTED  ║"
+            echo "╚══════════════════════════════════════╝"
+            echo ""
+            echo "Expected: $EXPECTED"
+            echo "Actual:   $ACTUAL"
+            echo ""
+            echo "The download may be corrupted or tampered with."
+            echo "Please download manually from GitHub Releases."
+            echo ""
+            rm -f /tmp/HollywoodSaver.app.zip /tmp/HollywoodSaver.app.zip.sha256
+            echo "Press Enter to close."
+            read
+            exit 1
+        fi
+        echo "Checksum verified ✓"
 
         # Backup current app
         if [ -d "HollywoodSaver.app" ]; then
@@ -2120,13 +2239,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             echo "Backed up to $BACKUP_NAME"
         fi
 
-        # Pull latest code
-        echo "Pulling latest code..."
-        git pull origin main
+        # Install new version
+        echo "Installing v\(latest)..."
+        unzip -o /tmp/HollywoodSaver.app.zip -d .
+        rm -f /tmp/HollywoodSaver.app.zip /tmp/HollywoodSaver.app.zip.sha256
 
-        # Rebuild
-        echo "Rebuilding..."
-        bash build.sh
+        # Clear version cache
+        defaults delete com.rangersmyth.hollywoodsaver lastVersionCheckDate 2>/dev/null || true
+        defaults delete com.rangersmyth.hollywoodsaver cachedLatestVersion 2>/dev/null || true
+        defaults delete com.rangersmyth.hollywoodsaver lastNotifiedVersion 2>/dev/null || true
+
+        echo ""
+        echo "========================================="
+        echo "  Update complete! Launching v\(latest)..."
+        echo "========================================="
+        echo ""
+        open "HollywoodSaver.app"
         """
 
         let tempScript = NSTemporaryDirectory() + "hollywoodsaver_update.sh"
@@ -2139,7 +2267,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try chmod.run()
             chmod.waitUntilExit()
 
-            // Use open -a Terminal (no Automation permission needed)
             let open = Process()
             open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
             open.arguments = ["-a", "Terminal", tempScript]
@@ -2153,14 +2280,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 let errorAlert = NSAlert()
                 errorAlert.messageText = "Update Failed"
-                errorAlert.informativeText = "Could not open Terminal.\n\nPlease update manually:\ncd \(appFolder) && git pull && bash build.sh"
+                errorAlert.informativeText = "Could not open Terminal.\n\nPlease download manually from:\nhttps://github.com/\(AppDelegate.githubRepo)/releases"
                 errorAlert.alertStyle = .warning
                 errorAlert.runModal()
             }
         } catch {
             let errorAlert = NSAlert()
             errorAlert.messageText = "Update Failed"
-            errorAlert.informativeText = "Could not start the update process: \(error.localizedDescription)\n\nPlease update manually:\ncd \(appFolder) && git pull && bash build.sh"
+            errorAlert.informativeText = "Could not start the update process: \(error.localizedDescription)\n\nPlease download manually from:\nhttps://github.com/\(AppDelegate.githubRepo)/releases"
             errorAlert.alertStyle = .warning
             errorAlert.runModal()
         }
@@ -2219,7 +2346,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Start")
         alert.addButton(withTitle: "Cancel")
         if alert.runModal() == .alertFirstButtonReturn {
-            if let mins = Int(input.stringValue), mins > 0 {
+            if let mins = Int(input.stringValue), mins > 0, mins <= 1440 {
                 startBreakWithMinutes(mins)
             }
         }

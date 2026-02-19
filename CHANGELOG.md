@@ -2,6 +2,23 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [4.4.0] - 2026-02-19
+
+### Security
+- **Secure Auto-Update** — replaced `git pull` + compile with pre-built GitHub Releases download + SHA-256 checksum verification. Eliminates supply chain risk from compromised repos.
+- **Hardened Runtime** — ad-hoc builds now include Hardened Runtime (blocks DYLD injection attacks)
+- **Input Validation** — custom timer inputs capped at 1440 minutes (24 hours max)
+
+### Added
+- `release.sh` — new script to create GitHub Releases with .app.zip and checksum assets
+
+### Changed
+- Version checker now uses GitHub Releases API (falls back to Tags API for older releases)
+- Update dialog explains download-based update with checksum verification
+- Error messages point to GitHub Releases page instead of git commands
+
+---
+
 ## [4.3.0] - 2026-02-19
 
 ### Added

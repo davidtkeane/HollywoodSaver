@@ -22,3 +22,6 @@ PRO_ROADMAP.md
 REGISTRATION_KEYS/
 .claude/
 HollywoodSaver-v*.app/
+
+# Security testing (private)
+security-tests/

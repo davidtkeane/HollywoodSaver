@@ -223,8 +223,14 @@ if [ -n "$SIGN_ID" ]; then
     fi
 else
     echo ""
-    echo -e "  ${YELLOW}⚠️${NC}  No Developer ID cert found — app built unsigned"
-    echo "     To sign: Xcode → Settings → Accounts → Manage Certificates → + Developer ID Application"
+    echo -e "${BLUE}Code signing (ad-hoc with Hardened Runtime)...${NC}"
+    codesign --deep --force --sign - --options runtime "$APP_DIR" 2>&1 || true
+    if codesign --verify --deep --strict "$APP_DIR" 2>/dev/null; then
+        echo -e "  ${GREEN}✅${NC} Ad-hoc signed with Hardened Runtime"
+    else
+        echo -e "  ${YELLOW}⚠️${NC}  Ad-hoc signing failed — app built unsigned"
+    fi
+    echo "     For public distribution: Xcode → Settings → Accounts → + Developer ID Application"
 fi
 
 echo ""
