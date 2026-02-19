@@ -652,6 +652,10 @@ class Prefs {
         get { defaults.bool(forKey: "showDesktopShortcut") }
         set { defaults.set(newValue, forKey: "showDesktopShortcut") }
     }
+    static var sleepCountdownEnabled: Bool {
+        get { defaults.object(forKey: "sleepCountdownEnabled") != nil ? defaults.bool(forKey: "sleepCountdownEnabled") : true }
+        set { defaults.set(newValue, forKey: "sleepCountdownEnabled") }
+    }
     static var pomodoroWork: Int {
         get { let v = defaults.integer(forKey: "pomodoroWork"); return v > 0 ? v : 25 }
         set { defaults.set(newValue, forKey: "pomodoroWork") }
@@ -1024,7 +1028,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "4.1.0"
+    static let appVersion = "4.2.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -1050,6 +1054,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sleepTimer: Timer?
     var sleepEndDate: Date?
     var sleepAfterPlayback = false
+    var sleepCountdownWindows: [NSWindow] = []
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1492,6 +1497,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sleepAfterItem.isEnabled = isPlaying || sleepAfterPlayback
         sleepSubmenu.addItem(sleepAfterItem)
 
+        let sleepCountdownItem = NSMenuItem(title: "Countdown Overlay", action: #selector(toggleSleepCountdown), keyEquivalent: "")
+        sleepCountdownItem.state = Prefs.sleepCountdownEnabled ? .on : .off
+        sleepSubmenu.addItem(sleepCountdownItem)
+
         sleepItem.submenu = sleepSubmenu
         menu.addItem(sleepItem)
 
@@ -1815,6 +1824,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         cancelSleepTimer()
         sleepEndDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
 
+        showSleepCountdownOverlay()
+
         sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
             guard let self = self, let endDate = self.sleepEndDate else {
                 timer.invalidate()
@@ -1825,11 +1836,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 timer.invalidate()
                 self.sleepTimer = nil
                 self.sleepEndDate = nil
+                self.hideSleepCountdownOverlay()
                 self.putMacToSleep()
-            } else if remaining == 300 {
-                self.sendBreakNotification(title: "Sleep Timer", body: "Mac will sleep in 5 minutes")
-            } else if remaining == 60 {
-                self.sendBreakNotification(title: "Sleep Timer", body: "Mac will sleep in 1 minute")
+            } else {
+                self.updateSleepCountdownOverlay()
+                if remaining == 300 {
+                    self.sendBreakNotification(title: "Sleep Timer", body: "Mac will sleep in 5 minutes")
+                } else if remaining == 60 {
+                    self.sendBreakNotification(title: "Sleep Timer", body: "Mac will sleep in 1 minute")
+                }
             }
         }
     }
@@ -1839,10 +1854,98 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sleepTimer = nil
         sleepEndDate = nil
         sleepAfterPlayback = false
+        hideSleepCountdownOverlay()
     }
 
     @objc func toggleSleepAfterPlayback() {
         sleepAfterPlayback = !sleepAfterPlayback
+    }
+
+    @objc func toggleSleepCountdown() {
+        Prefs.sleepCountdownEnabled = !Prefs.sleepCountdownEnabled
+        if Prefs.sleepCountdownEnabled && sleepEndDate != nil {
+            showSleepCountdownOverlay()
+        } else {
+            hideSleepCountdownOverlay()
+        }
+    }
+
+    func showSleepCountdownOverlay() {
+        hideSleepCountdownOverlay()
+        guard Prefs.sleepCountdownEnabled else { return }
+
+        let screens = NSScreen.screens
+        let builtIn = screens.first { $0.localizedName.contains("Built") }
+        let externals = screens.filter { !$0.localizedName.contains("Built") }
+
+        let targetScreens: [NSScreen]
+        switch Prefs.countdownScreen {
+        case "builtin": targetScreens = builtIn.map { [$0] } ?? screens
+        case "external": targetScreens = externals.isEmpty ? screens : externals
+        default: targetScreens = screens
+        }
+
+        let sizeConfig = countdownSizeConfig()
+        let size = CGSize(width: sizeConfig.width, height: sizeConfig.height)
+        let padding: CGFloat = 20
+
+        for screen in targetScreens {
+            // Sleep countdown goes in the opposite corner from break countdown
+            let origin: NSPoint
+            switch Prefs.countdownPosition {
+            case "topLeft":
+                origin = NSPoint(x: screen.frame.maxX - size.width - padding,
+                                 y: screen.frame.minY + padding)
+            case "bottomRight":
+                origin = NSPoint(x: screen.frame.minX + padding,
+                                 y: screen.frame.maxY - size.height - padding - 25)
+            case "bottomLeft":
+                origin = NSPoint(x: screen.frame.maxX - size.width - padding,
+                                 y: screen.frame.maxY - size.height - padding - 25)
+            default: // topRight — sleep goes to bottomLeft
+                origin = NSPoint(x: screen.frame.minX + padding,
+                                 y: screen.frame.minY + padding)
+            }
+
+            let window = NSWindow(
+                contentRect: NSRect(origin: origin, size: size),
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .floating
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            window.ignoresMouseEvents = true
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+
+            let sleepColor = NSColor(calibratedRed: 0.4, green: 0.6, blue: 1.0, alpha: 1.0)
+            let overlay = CountdownOverlayView(frame: NSRect(origin: .zero, size: size), fontSize: sizeConfig.fontSize, color: sleepColor)
+            window.contentView = overlay
+            window.orderFrontRegardless()
+            sleepCountdownWindows.append(window)
+        }
+
+        updateSleepCountdownOverlay()
+    }
+
+    func hideSleepCountdownOverlay() {
+        for window in sleepCountdownWindows {
+            window.orderOut(nil)
+        }
+        sleepCountdownWindows.removeAll()
+    }
+
+    func updateSleepCountdownOverlay() {
+        guard let endDate = sleepEndDate else {
+            hideSleepCountdownOverlay()
+            return
+        }
+        let remaining = max(0, Int(endDate.timeIntervalSinceNow))
+        for window in sleepCountdownWindows {
+            (window.contentView as? CountdownOverlayView)?.update(remaining: remaining, subtitle: "Sleep in")
+        }
     }
 
     @objc func openBuyMeACoffee() {

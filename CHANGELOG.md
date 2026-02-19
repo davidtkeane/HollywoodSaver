@@ -2,6 +2,17 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [4.2.0] - 2026-02-19
+
+### Added
+- **Sleep Countdown Overlay** — floating on-screen countdown showing time until sleep (blue color, positioned in opposite corner from break countdown)
+- **Countdown Overlay toggle** — enable/disable the sleep countdown from the Sleep submenu
+
+### Changed
+- Version bumped to 4.2.0
+
+---
+
 ## [4.1.0] - 2026-02-19
 
 ### Changed
