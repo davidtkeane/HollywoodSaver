@@ -33,7 +33,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Lock Screen** | Password-protected screen lock — Cmd+Shift+L to lock, SHA-256 hashed password |
 | **Show in Dock** | Toggle the app icon in the macOS Dock so you can see it alongside your other apps |
 | **Desktop Shortcut** | Create a shortcut on your Desktop — never forget you have HollywoodSaver |
-| **Sleep Timer** | Put your Mac to sleep now, after a timer (90/60/45/30/15 min), or after playback ends |
+| **Sleep Timer** | Put your Mac to sleep now, after a timer (90/60/45/30/15 min), or after playback ends — resumes playback on wake |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
 ## Quick Start

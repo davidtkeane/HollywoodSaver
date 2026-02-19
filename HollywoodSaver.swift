@@ -656,6 +656,10 @@ class Prefs {
         get { defaults.object(forKey: "sleepCountdownEnabled") != nil ? defaults.bool(forKey: "sleepCountdownEnabled") : true }
         set { defaults.set(newValue, forKey: "sleepCountdownEnabled") }
     }
+    static var resumeAfterSleep: Bool {
+        get { defaults.object(forKey: "resumeAfterSleep") != nil ? defaults.bool(forKey: "resumeAfterSleep") : true }
+        set { defaults.set(newValue, forKey: "resumeAfterSleep") }
+    }
     static var pomodoroWork: Int {
         get { let v = defaults.integer(forKey: "pomodoroWork"); return v > 0 ? v : 25 }
         set { defaults.set(newValue, forKey: "pomodoroWork") }
@@ -1028,7 +1032,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "4.2.0"
+    static let appVersion = "4.3.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -1055,6 +1059,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sleepEndDate: Date?
     var sleepAfterPlayback = false
     var sleepCountdownWindows: [NSWindow] = []
+    var savedMediaBeforeSleep: String?
+    var savedModeBeforeSleep: PlayMode?
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1189,6 +1195,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Sync desktop shortcut on launch
         syncDesktopShortcut()
+
+        // Listen for Mac wake from sleep
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(handleWakeFromSleep),
+            name: NSWorkspace.didWakeNotification, object: nil
+        )
+    }
+
+    @objc func handleWakeFromSleep() {
+        if Prefs.resumeAfterSleep, let media = savedMediaBeforeSleep, let mode = savedModeBeforeSleep {
+            savedMediaBeforeSleep = nil
+            savedModeBeforeSleep = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.startPlaying(media: media, on: NSScreen.screens, mode: mode)
+            }
+        } else {
+            savedMediaBeforeSleep = nil
+            savedModeBeforeSleep = nil
+        }
     }
 
     var isPlaying: Bool { currentMode != nil }
@@ -1501,6 +1526,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sleepCountdownItem.state = Prefs.sleepCountdownEnabled ? .on : .off
         sleepSubmenu.addItem(sleepCountdownItem)
 
+        let resumeAfterSleepItem = NSMenuItem(title: "Resume Playback After Wake", action: #selector(toggleResumeAfterSleep), keyEquivalent: "")
+        resumeAfterSleepItem.state = Prefs.resumeAfterSleep ? .on : .off
+        sleepSubmenu.addItem(resumeAfterSleepItem)
+
         sleepItem.submenu = sleepSubmenu
         menu.addItem(sleepItem)
 
@@ -1789,6 +1818,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Sleep
 
     func putMacToSleep() {
+        // Save playback state for resume after wake
+        if isPlaying {
+            savedMediaBeforeSleep = currentMediaPath
+            savedModeBeforeSleep = currentMode
+        }
         stopPlaying()
         let port = IOPMFindPowerManagement(mach_port_t(MACH_PORT_NULL))
         IOPMSleepSystem(port)
@@ -1859,6 +1893,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleSleepAfterPlayback() {
         sleepAfterPlayback = !sleepAfterPlayback
+    }
+
+    @objc func toggleResumeAfterSleep() {
+        Prefs.resumeAfterSleep = !Prefs.resumeAfterSleep
     }
 
     @objc func toggleSleepCountdown() {

@@ -2,6 +2,16 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [4.3.0] - 2026-02-19
+
+### Added
+- **Resume Playback After Wake** — when Mac wakes from sleep, automatically resumes the screensaver/ambient playback that was running before sleep (enabled by default, toggleable in Sleep submenu)
+
+### Changed
+- Version bumped to 4.3.0
+
+---
+
 ## [4.2.0] - 2026-02-19
 
 ### Added
