@@ -16,3 +16,9 @@ TODO_FEATURES.md
 AppStore-Plan/
 AppStore-Plan/
 HollywoodSaver.code-workspace
+
+# Internal roadmaps and business docs
+PRO_ROADMAP.md
+REGISTRATION_KEYS/
+.claude/
+HollywoodSaver-v*.app/
