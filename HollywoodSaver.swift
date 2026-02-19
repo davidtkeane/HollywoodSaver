@@ -625,6 +625,32 @@ class Prefs {
         set { defaults.set(newValue, forKey: "rainScreen") }
     }
 
+    // Clock overlay
+    static var clockEnabled: Bool {
+        get { defaults.bool(forKey: "clockEnabled") }
+        set { defaults.set(newValue, forKey: "clockEnabled") }
+    }
+    static var clockShowDate: Bool {
+        get { defaults.bool(forKey: "clockShowDate") }
+        set { defaults.set(newValue, forKey: "clockShowDate") }
+    }
+    static var clockScreen: String {
+        get { defaults.string(forKey: "clockScreen") ?? "all" }
+        set { defaults.set(newValue, forKey: "clockScreen") }
+    }
+    static var clockPosition: String {
+        get { defaults.string(forKey: "clockPosition") ?? "topLeft" }
+        set { defaults.set(newValue, forKey: "clockPosition") }
+    }
+    static var clockColor: String {
+        get { defaults.string(forKey: "clockColor") ?? "Green" }
+        set { defaults.set(newValue, forKey: "clockColor") }
+    }
+    static var clockSize: String {
+        get { defaults.string(forKey: "clockSize") ?? "Normal" }
+        set { defaults.set(newValue, forKey: "clockSize") }
+    }
+
     // Break reminder
     static var breakDuration: Int {
         get { let v = defaults.integer(forKey: "breakDuration"); return v > 0 ? v : 60 }
@@ -1045,6 +1071,49 @@ class CountdownOverlayView: NSView {
     }
 }
 
+class ClockOverlayView: NSView {
+    var timeLabel: NSTextField!
+    var dateLabel: NSTextField!
+
+    init(frame: NSRect, fontSize: CGFloat, color: NSColor, showDate: Bool) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
+        layer?.cornerRadius = 12
+
+        let dateSize: CGFloat = fontSize < 22 ? 9 : (fontSize > 30 ? 14 : 11)
+
+        timeLabel = NSTextField(labelWithString: "00:00:00")
+        timeLabel.font = NSFont(name: "Menlo", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
+        timeLabel.textColor = color
+        timeLabel.alignment = .center
+        timeLabel.frame = NSRect(x: 0, y: showDate ? 2 : (frame.height - fontSize - 4) / 2, width: frame.width, height: fontSize + 4)
+        timeLabel.autoresizingMask = [.width]
+        addSubview(timeLabel)
+
+        dateLabel = NSTextField(labelWithString: "")
+        dateLabel.font = NSFont.systemFont(ofSize: dateSize, weight: .medium)
+        dateLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        dateLabel.alignment = .center
+        dateLabel.frame = NSRect(x: 0, y: frame.height - dateSize - 6, width: frame.width, height: dateSize + 4)
+        dateLabel.autoresizingMask = [.width]
+        dateLabel.isHidden = !showDate
+        addSubview(dateLabel)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func update(time: String, date: String?) {
+        timeLabel.stringValue = time
+        if let date = date {
+            dateLabel.stringValue = date
+            dateLabel.isHidden = false
+        } else {
+            dateLabel.isHidden = true
+        }
+    }
+}
+
 // MARK: - App Delegate
 
 enum PlayMode {
@@ -1054,7 +1123,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "4.7.0"
+    static let appVersion = "4.8.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -1089,6 +1158,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var rainOverlayViews: [ScreensaverContent] = []
     var rainBehindWindows: [NSWindow] = []
     var rainBehindViews: [ScreensaverContent] = []
+    var clockWindows: [NSWindow] = []
+    var clockTimer: Timer?
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
@@ -1226,6 +1297,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 if Prefs.rainBehindEnabled { self.startRainBehind() }
                 if Prefs.rainOverlayEnabled { self.startRainOverlay() }
+            }
+        }
+
+        if Prefs.clockEnabled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.startClockOverlay()
             }
         }
 
@@ -1554,6 +1631,71 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         rainItem.submenu = rainSubmenu
         menu.addItem(rainItem)
+
+        // Clock overlay submenu
+        let clockItem = NSMenuItem(title: "Clock", action: nil, keyEquivalent: "")
+        let clockSubmenu = NSMenu(title: "Clock")
+
+        let clockToggle = NSMenuItem(title: "Show Clock", action: #selector(toggleClockOverlay), keyEquivalent: "")
+        clockToggle.state = !clockWindows.isEmpty ? .on : .off
+        clockSubmenu.addItem(clockToggle)
+
+        let clockDateToggle = NSMenuItem(title: "Show Date", action: #selector(toggleClockDate), keyEquivalent: "")
+        clockDateToggle.state = Prefs.clockShowDate ? .on : .off
+        clockSubmenu.addItem(clockDateToggle)
+
+        clockSubmenu.addItem(NSMenuItem.separator())
+
+        // Clock Display
+        let clockDisplayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
+        let clockDisplaySubmenu = NSMenu(title: "Display")
+        for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
+            let item = NSMenuItem(title: label, action: #selector(setClockScreen(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.clockScreen == value ? .on : .off
+            clockDisplaySubmenu.addItem(item)
+        }
+        clockDisplayItem.submenu = clockDisplaySubmenu
+        clockSubmenu.addItem(clockDisplayItem)
+
+        // Clock Position
+        let clockPositionItem = NSMenuItem(title: "Position", action: nil, keyEquivalent: "")
+        let clockPositionSubmenu = NSMenu(title: "Position")
+        for (label, value) in [("Top Right", "topRight"), ("Top Left", "topLeft"), ("Bottom Right", "bottomRight"), ("Bottom Left", "bottomLeft")] {
+            let item = NSMenuItem(title: label, action: #selector(setClockPosition(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.clockPosition == value ? .on : .off
+            clockPositionSubmenu.addItem(item)
+        }
+        clockPositionItem.submenu = clockPositionSubmenu
+        clockSubmenu.addItem(clockPositionItem)
+
+        // Clock Color
+        let clockColorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        let clockColorSubmenu = NSMenu(title: "Color")
+        for color in ["Green", "Blue", "Red", "Orange", "White", "Purple"] {
+            let item = NSMenuItem(title: color, action: #selector(setClockColor(_:)), keyEquivalent: "")
+            item.representedObject = color as AnyObject
+            item.state = Prefs.clockColor == color ? .on : .off
+            clockColorSubmenu.addItem(item)
+        }
+        clockColorItem.submenu = clockColorSubmenu
+        clockSubmenu.addItem(clockColorItem)
+
+        // Clock Size
+        let clockSizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        let clockSizeSubmenu = NSMenu(title: "Size")
+        for size in ["Compact", "Normal", "Large"] {
+            let item = NSMenuItem(title: size, action: #selector(setClockSize(_:)), keyEquivalent: "")
+            item.representedObject = size as AnyObject
+            item.state = Prefs.clockSize == size ? .on : .off
+            clockSizeSubmenu.addItem(item)
+        }
+        clockSizeItem.submenu = clockSizeSubmenu
+        clockSubmenu.addItem(clockSizeItem)
+
+        clockItem.submenu = clockSubmenu
+        menu.addItem(clockItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -3323,6 +3465,191 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Prefs.rainScreen = value
         if !rainBehindWindows.isEmpty { startRainBehind() }
         if !rainOverlayWindows.isEmpty { startRainOverlay() }
+    }
+
+    // MARK: - Clock Overlay
+
+    func clockNSColor() -> NSColor {
+        switch Prefs.clockColor {
+        case "Blue": return NSColor(calibratedRed: 0.2, green: 0.6, blue: 1, alpha: 1)
+        case "Red": return NSColor(calibratedRed: 1, green: 0.3, blue: 0.3, alpha: 1)
+        case "Orange": return NSColor.orange
+        case "White": return NSColor.white
+        case "Purple": return NSColor(calibratedRed: 0.7, green: 0.4, blue: 1, alpha: 1)
+        default: return NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
+        }
+    }
+
+    func clockSizeConfig() -> (width: CGFloat, height: CGFloat, fontSize: CGFloat) {
+        switch Prefs.clockSize {
+        case "Compact": return (120, Prefs.clockShowDate ? 48 : 32, 16)
+        case "Large": return (260, Prefs.clockShowDate ? 80 : 58, 36)
+        default: return (180, Prefs.clockShowDate ? 62 : 44, 24)
+        }
+    }
+
+    func showClockOverlay() {
+        hideClockOverlay()
+
+        let allScreens = NSScreen.screens
+        let builtIn = allScreens.first { $0.localizedName.contains("Built") }
+        let externals = allScreens.filter { !$0.localizedName.contains("Built") }
+        let targetScreens: [NSScreen]
+        switch Prefs.clockScreen {
+        case "builtin": targetScreens = builtIn.map { [$0] } ?? allScreens
+        case "external": targetScreens = externals.isEmpty ? allScreens : externals
+        default: targetScreens = allScreens
+        }
+
+        let sizeConfig = clockSizeConfig()
+        let size = CGSize(width: sizeConfig.width, height: sizeConfig.height)
+        let color = clockNSColor()
+        let padding: CGFloat = 20
+        let menuBarHeight: CGFloat = 25
+
+        for screen in targetScreens {
+            let origin: NSPoint
+            switch Prefs.clockPosition {
+            case "topLeft":
+                origin = NSPoint(x: screen.frame.minX + padding,
+                                 y: screen.frame.maxY - size.height - padding - menuBarHeight)
+            case "bottomRight":
+                origin = NSPoint(x: screen.frame.maxX - size.width - padding,
+                                 y: screen.frame.minY + padding)
+            case "bottomLeft":
+                origin = NSPoint(x: screen.frame.minX + padding,
+                                 y: screen.frame.minY + padding)
+            default:
+                origin = NSPoint(x: screen.frame.maxX - size.width - padding,
+                                 y: screen.frame.maxY - size.height - padding - menuBarHeight)
+            }
+
+            let window = NSWindow(
+                contentRect: NSRect(origin: origin, size: size),
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .floating
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            window.ignoresMouseEvents = true
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+
+            let overlay = ClockOverlayView(frame: NSRect(origin: .zero, size: size), fontSize: sizeConfig.fontSize, color: color, showDate: Prefs.clockShowDate)
+            window.contentView = overlay
+            window.orderFrontRegardless()
+            clockWindows.append(window)
+        }
+
+        updateClockOverlay()
+    }
+
+    func hideClockOverlay() {
+        clockTimer?.invalidate()
+        clockTimer = nil
+        for window in clockWindows { window.orderOut(nil) }
+        clockWindows.removeAll()
+    }
+
+    func updateClockOverlay() {
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = DateFormatter.dateFormat(fromTemplate: "jms", options: 0, locale: Locale.current)
+
+        let now = Date()
+        let timeString = timeFormatter.string(from: now)
+
+        var dateString: String? = nil
+        if Prefs.clockShowDate {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "EEE, MMM d"
+            dateString = dateFormatter.string(from: now)
+        }
+
+        for window in clockWindows {
+            (window.contentView as? ClockOverlayView)?.update(time: timeString, date: dateString)
+        }
+    }
+
+    func startClockOverlay() {
+        showClockOverlay()
+        clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.updateClockOverlay()
+        }
+        Prefs.clockEnabled = true
+    }
+
+    func stopClockOverlay() {
+        hideClockOverlay()
+        Prefs.clockEnabled = false
+    }
+
+    @objc func toggleClockOverlay() {
+        if clockWindows.isEmpty {
+            startClockOverlay()
+        } else {
+            stopClockOverlay()
+        }
+    }
+
+    @objc func toggleClockDate() {
+        Prefs.clockShowDate = !Prefs.clockShowDate
+        if !clockWindows.isEmpty {
+            showClockOverlay()
+            clockTimer?.invalidate()
+            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.updateClockOverlay()
+            }
+        }
+    }
+
+    @objc func setClockScreen(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.clockScreen = value
+        if !clockWindows.isEmpty {
+            showClockOverlay()
+            clockTimer?.invalidate()
+            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.updateClockOverlay()
+            }
+        }
+    }
+
+    @objc func setClockPosition(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.clockPosition = value
+        if !clockWindows.isEmpty {
+            showClockOverlay()
+            clockTimer?.invalidate()
+            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.updateClockOverlay()
+            }
+        }
+    }
+
+    @objc func setClockColor(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.clockColor = value
+        if !clockWindows.isEmpty {
+            showClockOverlay()
+            clockTimer?.invalidate()
+            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.updateClockOverlay()
+            }
+        }
+    }
+
+    @objc func setClockSize(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.clockSize = value
+        if !clockWindows.isEmpty {
+            showClockOverlay()
+            clockTimer?.invalidate()
+            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.updateClockOverlay()
+            }
+        }
     }
 }
 

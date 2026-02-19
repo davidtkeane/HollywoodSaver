@@ -2,6 +2,20 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [4.8.0] - 2026-02-19
+
+### Added
+- **Floating Clock Overlay** — always-on-top, click-through clock displaying current time
+- **Show Date toggle** — optionally show day and date above the time
+- **Clock Display selection** — All Screens, Built-in, or External
+- **Clock Position** — place in any corner: Top Right, Top Left, Bottom Right, Bottom Left
+- **Clock Color** — 6 colors matching Matrix Rain: Green, Blue, Red, Orange, White, Purple
+- **Clock Size** — Compact, Normal, or Large
+- Clock auto-restores on app relaunch
+- Uses system locale for 12hr/24hr time format
+
+---
+
 ## [4.7.0] - 2026-02-19
 
 ### Added
