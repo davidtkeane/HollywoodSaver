@@ -17,6 +17,7 @@ enum PlayMode {
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
     static let starfieldWarpSentinel = "##STARFIELD_WARP##"
+    static let photoSlideshowSentinel = "##PHOTO_SLIDESHOW##"
     static let appVersion = "5.0.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
@@ -57,6 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     static let videoExtensions = ["mp4", "mov", "m4v"]
     static let gifExtensions = ["gif"]
+    static let photoExtensions = ["jpg", "jpeg", "png", "heic", "heif"]
     static let allExtensions = videoExtensions + gifExtensions
 
     var appFolder: String {
@@ -112,7 +114,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return AppDelegate.gifExtensions.contains(ext)
     }
 
-    static let mediaSubfolders = ["videos", "gifs"]
+    static let mediaSubfolders = ["videos", "gifs", "photos"]
 
     func findMedia() -> [String] {
         let fm = FileManager.default
@@ -134,6 +136,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return media
+    }
+
+    /// Find all photo files (.jpg/.jpeg/.png/.heic/.heif). Scans the root
+    /// folder and the `photos/` subfolder. Used exclusively by the Photo
+    /// Slideshow feature — photos never appear as individual media items.
+    func findPhotos() -> [URL] {
+        let fm = FileManager.default
+        var photos: [URL] = []
+
+        let folders = [appFolder, (appFolder as NSString).appendingPathComponent("photos")]
+        for folder in folders {
+            if let files = try? fm.contentsOfDirectory(atPath: folder) {
+                for file in files.sorted() {
+                    let ext = (file as NSString).pathExtension.lowercased()
+                    if AppDelegate.photoExtensions.contains(ext) {
+                        photos.append(URL(fileURLWithPath: (folder as NSString).appendingPathComponent(file)))
+                    }
+                }
+            }
+        }
+        return photos
     }
 
     func displayName(for path: String) -> String {
@@ -172,7 +195,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Auto play on launch
         if Prefs.autoPlayEnabled, let filename = Prefs.lastMediaFilename {
             let mode: PlayMode = Prefs.lastPlayMode == "ambient" ? .ambient : .screensaver
-            if filename == AppDelegate.matrixRainSentinel || filename == AppDelegate.starfieldWarpSentinel {
+            let isBuiltIn = filename == AppDelegate.matrixRainSentinel
+                         || filename == AppDelegate.starfieldWarpSentinel
+                         || filename == AppDelegate.photoSlideshowSentinel
+            if isBuiltIn {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self.startPlaying(media: filename, on: NSScreen.screens, mode: mode)
                 }
@@ -673,6 +699,64 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         starfieldItem.submenu = starfieldSubmenu
         menu.addItem(starfieldItem)
+
+        // Photo Slideshow (Ken Burns) — third built-in effect alongside Matrix Rain + Starfield Warp
+        let slideshowItem = NSMenuItem(title: "Photo Slideshow 📸", action: nil, keyEquivalent: "")
+        let slideshowSubmenu = NSMenu()
+        let photoCount = findPhotos().count
+
+        if photoCount == 0 {
+            let noPhotos = NSMenuItem(title: "No photos found", action: nil, keyEquivalent: "")
+            noPhotos.isEnabled = false
+            slideshowSubmenu.addItem(noPhotos)
+            let hint = NSMenuItem(title: "Drop .jpg / .png / .heic into photos/", action: nil, keyEquivalent: "")
+            hint.isEnabled = false
+            slideshowSubmenu.addItem(hint)
+        } else {
+            let countItem = NSMenuItem(title: "\(photoCount) photo\(photoCount == 1 ? "" : "s") ready", action: nil, keyEquivalent: "")
+            countItem.isEnabled = false
+            slideshowSubmenu.addItem(countItem)
+            slideshowSubmenu.addItem(NSMenuItem.separator())
+
+            // Slideshow Settings submenu
+            let slideshowSettingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+            let slideshowSettingsSubmenu = NSMenu()
+
+            // Duration options
+            let durationItem = NSMenuItem(title: "Slide Duration", action: nil, keyEquivalent: "")
+            let durationMenu = NSMenu()
+            for (label, seconds) in [("3 seconds", 3.0), ("5 seconds", 5.0), ("8 seconds", 8.0), ("10 seconds", 10.0), ("15 seconds", 15.0), ("30 seconds", 30.0)] {
+                let item = NSMenuItem(title: label, action: #selector(setSlideshowDuration(_:)), keyEquivalent: "")
+                item.representedObject = seconds as AnyObject
+                item.state = Prefs.slideshowDuration == seconds ? .on : .off
+                durationMenu.addItem(item)
+            }
+            durationItem.submenu = durationMenu
+            slideshowSettingsSubmenu.addItem(durationItem)
+
+            // Transition options
+            let transitionItem = NSMenuItem(title: "Transition Speed", action: nil, keyEquivalent: "")
+            let transitionMenu = NSMenu()
+            for (label, seconds) in [("Fast (0.5s)", 0.5), ("Normal (1.5s)", 1.5), ("Slow (3s)", 3.0)] {
+                let item = NSMenuItem(title: label, action: #selector(setSlideshowTransition(_:)), keyEquivalent: "")
+                item.representedObject = seconds as AnyObject
+                item.state = Prefs.slideshowTransition == seconds ? .on : .off
+                transitionMenu.addItem(item)
+            }
+            transitionItem.submenu = transitionMenu
+            slideshowSettingsSubmenu.addItem(transitionItem)
+
+            slideshowSettingsItem.submenu = slideshowSettingsSubmenu
+            slideshowSubmenu.addItem(slideshowSettingsItem)
+
+            slideshowSubmenu.addItem(NSMenuItem.separator())
+
+            // Screen selection for Photo Slideshow (reuses addScreenItems helper)
+            addScreenItems(to: slideshowSubmenu, file: AppDelegate.photoSlideshowSentinel, builtIn: builtIn, externals: externals)
+        }
+
+        slideshowItem.submenu = slideshowSubmenu
+        menu.addItem(slideshowItem)
 
         // Break Reminder
         menu.addItem(NSMenuItem.separator())
@@ -1693,6 +1777,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Photo Slideshow settings actions
+
+    @objc func setSlideshowDuration(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? Double else { return }
+        Prefs.slideshowDuration = value
+    }
+
+    @objc func setSlideshowTransition(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? Double else { return }
+        Prefs.slideshowTransition = value
+    }
+
     // MARK: - Break Reminder
 
     @objc func startBreakTimer(_ sender: NSMenuItem) {
@@ -2331,7 +2427,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let isMatrixRain = (media == AppDelegate.matrixRainSentinel)
         let isStarfieldWarp = (media == AppDelegate.starfieldWarpSentinel)
-        let isBuiltInEffect = isMatrixRain || isStarfieldWarp
+        let isPhotoSlideshow = (media == AppDelegate.photoSlideshowSentinel)
+        let isBuiltInEffect = isMatrixRain || isStarfieldWarp || isPhotoSlideshow
+
+        // Photo slideshow needs at least one photo in the photos/ folder —
+        // refuse to start if there aren't any rather than show a black screen.
+        if isPhotoSlideshow {
+            if findPhotos().isEmpty {
+                let alert = NSAlert()
+                alert.messageText = "No Photos Found"
+                alert.informativeText = "Drop .jpg / .png / .heic files into the photos/ folder next to the app, then try again."
+                alert.alertStyle = .warning
+                alert.runModal()
+                return
+            }
+        }
 
         if !isBuiltInEffect {
             guard FileManager.default.fileExists(atPath: media) else {
@@ -2350,6 +2460,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             nowPlayingName = "Matrix Rain"
         } else if isStarfieldWarp {
             nowPlayingName = "Starfield Warp"
+        } else if isPhotoSlideshow {
+            nowPlayingName = "Photo Slideshow"
         } else {
             nowPlayingName = displayName(for: media)
         }
@@ -2396,6 +2508,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 content = MatrixRainView(frame: screen.frame)
             } else if isStarfieldWarp {
                 content = StarfieldWarpView(frame: screen.frame)
+            } else if isPhotoSlideshow {
+                content = PhotoSlideshowView(
+                    frame: screen.frame,
+                    photoURLs: findPhotos(),
+                    slideDuration: Prefs.slideshowDuration,
+                    transitionDuration: Prefs.slideshowTransition
+                )
             } else if isGif(media) {
                 let url = URL(fileURLWithPath: media)
                 content = GifPlayerView(frame: screen.frame, gifURL: url)

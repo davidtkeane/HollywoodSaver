@@ -10,6 +10,10 @@ compress_gif.sh
 *.gif
 !demo.gif
 
+# User photos — slideshow is user content, but keep the folder tracked via .gitkeep
+photos/*
+!photos/.gitkeep
+
 # macOS
 .DS_Store
 TODO_FEATURES.md

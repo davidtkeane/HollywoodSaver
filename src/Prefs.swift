@@ -128,6 +128,25 @@ class Prefs {
         set { defaults.set(newValue, forKey: "starfieldSpacecraft") }
     }
 
+    // MARK: - Photo Slideshow (Ken Burns)
+
+    /// Seconds per photo before advancing to the next slide. Default 8.
+    static var slideshowDuration: Double {
+        get {
+            let v = defaults.double(forKey: "slideshowDuration")
+            return v > 0 ? v : 8.0
+        }
+        set { defaults.set(newValue, forKey: "slideshowDuration") }
+    }
+    /// Crossfade seconds between photos. Default 1.5.
+    static var slideshowTransition: Double {
+        get {
+            let v = defaults.double(forKey: "slideshowTransition")
+            return v > 0 ? v : 1.5
+        }
+        set { defaults.set(newValue, forKey: "slideshowTransition") }
+    }
+
     // Rain Effects
     static var rainOverlayEnabled: Bool {
         get { defaults.bool(forKey: "rainOverlayEnabled") }
