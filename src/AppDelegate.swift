@@ -596,30 +596,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let starfieldBackdropItem = NSMenuItem(title: "Backdrop", action: nil, keyEquivalent: "")
         let starfieldBackdropMenu = NSMenu()
 
-        let bgStarsToggle = NSMenuItem(title: "Background Stars", action: #selector(toggleStarfieldBackgroundStars), keyEquivalent: "")
-        bgStarsToggle.state = Prefs.starfieldBackgroundStars ? .on : .off
-        starfieldBackdropMenu.addItem(bgStarsToggle)
+        // Backdrop layer toggles — use ToggleMenuItemView so the menu stays
+        // open while the user flicks multiple layers on/off to compare.
+        let bgStarsItem = NSMenuItem()
+        bgStarsItem.view = ToggleMenuItemView(title: "Background Stars", isOn: Prefs.starfieldBackgroundStars) { newValue in
+            Prefs.starfieldBackgroundStars = newValue
+        }
+        starfieldBackdropMenu.addItem(bgStarsItem)
 
-        let gradientToggle = NSMenuItem(title: "Deep Space Gradient", action: #selector(toggleStarfieldGradient), keyEquivalent: "")
-        gradientToggle.state = Prefs.starfieldGradient ? .on : .off
-        starfieldBackdropMenu.addItem(gradientToggle)
+        let gradientItem = NSMenuItem()
+        gradientItem.view = ToggleMenuItemView(title: "Deep Space Gradient", isOn: Prefs.starfieldGradient) { newValue in
+            Prefs.starfieldGradient = newValue
+        }
+        starfieldBackdropMenu.addItem(gradientItem)
 
-        let galaxiesToggle = NSMenuItem(title: "Distant Galaxies", action: #selector(toggleStarfieldGalaxies), keyEquivalent: "")
-        galaxiesToggle.state = Prefs.starfieldGalaxies ? .on : .off
-        starfieldBackdropMenu.addItem(galaxiesToggle)
+        let galaxiesItem = NSMenuItem()
+        galaxiesItem.view = ToggleMenuItemView(title: "Distant Galaxies", isOn: Prefs.starfieldGalaxies) { newValue in
+            Prefs.starfieldGalaxies = newValue
+        }
+        starfieldBackdropMenu.addItem(galaxiesItem)
 
-        let nebulaeToggle = NSMenuItem(title: "Nebula Clouds", action: #selector(toggleStarfieldNebulae), keyEquivalent: "")
-        nebulaeToggle.state = Prefs.starfieldNebulae ? .on : .off
-        starfieldBackdropMenu.addItem(nebulaeToggle)
+        let nebulaeItem = NSMenuItem()
+        nebulaeItem.view = ToggleMenuItemView(title: "Nebula Clouds", isOn: Prefs.starfieldNebulae) { newValue in
+            Prefs.starfieldNebulae = newValue
+        }
+        starfieldBackdropMenu.addItem(nebulaeItem)
 
         // Planets submenu with Show toggle + count override
         starfieldBackdropMenu.addItem(NSMenuItem.separator())
         let planetsItem = NSMenuItem(title: "Planets", action: nil, keyEquivalent: "")
         let planetsMenu = NSMenu()
 
-        let planetsShowToggle = NSMenuItem(title: "Show Planets", action: #selector(toggleStarfieldPlanets), keyEquivalent: "")
-        planetsShowToggle.state = Prefs.starfieldPlanets ? .on : .off
-        planetsMenu.addItem(planetsShowToggle)
+        let planetsShowItem = NSMenuItem()
+        planetsShowItem.view = ToggleMenuItemView(title: "Show Planets", isOn: Prefs.starfieldPlanets) { newValue in
+            Prefs.starfieldPlanets = newValue
+        }
+        planetsMenu.addItem(planetsShowItem)
 
         planetsMenu.addItem(NSMenuItem.separator())
 
@@ -645,13 +657,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let cometsItem = NSMenuItem(title: "Comets", action: nil, keyEquivalent: "")
         let cometsMenu = NSMenu()
 
-        let passingCometsToggle = NSMenuItem(title: "Passing Comets", action: #selector(toggleStarfieldPassingComets), keyEquivalent: "")
-        passingCometsToggle.state = Prefs.starfieldPassingComets ? .on : .off
-        cometsMenu.addItem(passingCometsToggle)
+        let passingCometsItem = NSMenuItem()
+        passingCometsItem.view = ToggleMenuItemView(title: "Passing Comets", isOn: Prefs.starfieldPassingComets) { newValue in
+            Prefs.starfieldPassingComets = newValue
+        }
+        cometsMenu.addItem(passingCometsItem)
 
-        let diveCometToggle = NSMenuItem(title: "Screen-Dive Comet 🎯", action: #selector(toggleStarfieldDiveComet), keyEquivalent: "")
-        diveCometToggle.state = Prefs.starfieldDiveComet ? .on : .off
-        cometsMenu.addItem(diveCometToggle)
+        let diveCometItem = NSMenuItem()
+        diveCometItem.view = ToggleMenuItemView(title: "Screen-Dive Comet 🎯", isOn: Prefs.starfieldDiveComet) { newValue in
+            Prefs.starfieldDiveComet = newValue
+        }
+        cometsMenu.addItem(diveCometItem)
 
         cometsMenu.addItem(NSMenuItem.separator())
 
@@ -666,9 +682,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let spacecraftItem = NSMenuItem(title: "Spacecraft 🛸", action: nil, keyEquivalent: "")
         let spacecraftMenu = NSMenu()
 
-        let spacecraftToggle = NSMenuItem(title: "Show Spacecraft", action: #selector(toggleStarfieldSpacecraft), keyEquivalent: "")
-        spacecraftToggle.state = Prefs.starfieldSpacecraft ? .on : .off
-        spacecraftMenu.addItem(spacecraftToggle)
+        let spacecraftShowItem = NSMenuItem()
+        spacecraftShowItem.view = ToggleMenuItemView(title: "Show Spacecraft", isOn: Prefs.starfieldSpacecraft) { newValue in
+            Prefs.starfieldSpacecraft = newValue
+        }
+        spacecraftMenu.addItem(spacecraftShowItem)
 
         spacecraftMenu.addItem(NSMenuItem.separator())
 
@@ -1797,37 +1815,14 @@ github.com/davidtkeane/HollywoodSaver
         startPlaying(media: AppDelegate.starfieldWarpSentinel, on: NSScreen.screens, mode: .screensaver)
     }
 
-    @objc func toggleStarfieldBackgroundStars() {
-        Prefs.starfieldBackgroundStars = !Prefs.starfieldBackgroundStars
-    }
-
-    @objc func toggleStarfieldGradient() {
-        Prefs.starfieldGradient = !Prefs.starfieldGradient
-    }
-
-    @objc func toggleStarfieldGalaxies() {
-        Prefs.starfieldGalaxies = !Prefs.starfieldGalaxies
-    }
-
-    @objc func toggleStarfieldNebulae() {
-        Prefs.starfieldNebulae = !Prefs.starfieldNebulae
-    }
-
-    @objc func toggleStarfieldPlanets() {
-        Prefs.starfieldPlanets = !Prefs.starfieldPlanets
-    }
+    // Note: the individual backdrop layer toggles (Background Stars, Gradient,
+    // Galaxies, Nebulae, Planets, Passing Comets, Dive Comet) are now handled
+    // by ToggleMenuItemView closures rather than @objc selectors so the menu
+    // stays open while the user flicks multiple toggles in a row.
 
     @objc func setStarfieldPlanetsCount(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.starfieldPlanetsCount = value
-    }
-
-    @objc func toggleStarfieldPassingComets() {
-        Prefs.starfieldPassingComets = !Prefs.starfieldPassingComets
-    }
-
-    @objc func toggleStarfieldDiveComet() {
-        Prefs.starfieldDiveComet = !Prefs.starfieldDiveComet
     }
 
     @objc func triggerStarfieldDiveCometNow() {
@@ -1837,10 +1832,6 @@ github.com/davidtkeane/HollywoodSaver
                 starfield.triggerDiveComet(now: CACurrentMediaTime())
             }
         }
-    }
-
-    @objc func toggleStarfieldSpacecraft() {
-        Prefs.starfieldSpacecraft = !Prefs.starfieldSpacecraft
     }
 
     @objc func triggerStarfieldSpacecraftNow() {
