@@ -102,6 +102,16 @@ class Prefs {
         get { defaults.object(forKey: "starfieldNebulae") != nil ? defaults.bool(forKey: "starfieldNebulae") : true }
         set { defaults.set(newValue, forKey: "starfieldNebulae") }
     }
+    /// Planets — 0–3 static planets with optional moons. Default ON.
+    static var starfieldPlanets: Bool {
+        get { defaults.object(forKey: "starfieldPlanets") != nil ? defaults.bool(forKey: "starfieldPlanets") : true }
+        set { defaults.set(newValue, forKey: "starfieldPlanets") }
+    }
+    /// Count override: "random" (0-3 random), "0", "1", "2", or "3". Default "random".
+    static var starfieldPlanetsCount: String {
+        get { defaults.string(forKey: "starfieldPlanetsCount") ?? "random" }
+        set { defaults.set(newValue, forKey: "starfieldPlanetsCount") }
+    }
 
     // Rain Effects
     static var rainOverlayEnabled: Bool {

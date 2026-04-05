@@ -99,6 +99,52 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         var maxAlpha: CGFloat       // peak alpha so galaxies don't overwhelm warp stars
     }
 
+    /// Planet types — 5 variants, each with its own size range and base color.
+    enum PlanetType: CaseIterable {
+        case gasGiant      // Jupiter — big, warm amber
+        case ringedGiant   // Saturn — cream with ring ellipse
+        case iceGiant      // Neptune — deep blue
+        case rocky         // Mars — small red-orange
+        case alien         // Fantasy — small teal-green
+
+        var sizeRange: ClosedRange<CGFloat> {
+            switch self {
+            case .gasGiant:    return 80...120
+            case .ringedGiant: return 70...100
+            case .iceGiant:    return 50...80
+            case .rocky:       return 30...50
+            case .alien:       return 30...50
+            }
+        }
+
+        var baseColor: NSColor {
+            switch self {
+            case .gasGiant:    return NSColor(red: 0.92, green: 0.75, blue: 0.50, alpha: 1)
+            case .ringedGiant: return NSColor(red: 0.95, green: 0.85, blue: 0.65, alpha: 1)
+            case .iceGiant:    return NSColor(red: 0.35, green: 0.55, blue: 0.90, alpha: 1)
+            case .rocky:       return NSColor(red: 0.80, green: 0.35, blue: 0.20, alpha: 1)
+            case .alien:       return NSColor(red: 0.40, green: 0.88, blue: 0.55, alpha: 1)
+            }
+        }
+
+        var hasRing: Bool { self == .ringedGiant }
+    }
+
+    /// A planet with optional orbiting moon. Planets are static in position
+    /// (they don't drift like nebulae) but moons orbit slowly around them.
+    struct Planet {
+        var centerX: CGFloat
+        var centerY: CGFloat
+        var radius: CGFloat
+        var type: PlanetType
+        var baseColor: NSColor
+        var hasMoon: Bool
+        var moonDistance: CGFloat      // from planet center
+        var moonRadius: CGFloat
+        var moonBasePhase: CGFloat     // starting angle in radians
+        var moonOrbitSpeed: CGFloat    // rad/sec — slow
+    }
+
     /// Drifting nebula clouds — huge diffuse color blobs that slowly wash
     /// across the scene. Much softer than galaxies (no bright core, very low
     /// alpha), much bigger, and they actually move instead of just rotating.
@@ -145,6 +191,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
     var backgroundStars: [BackgroundStar] = []
     var galaxies: [Galaxy] = []
     var nebulae: [Nebula] = []
+    var planets: [Planet] = []
     var speed: StarfieldSpeed
     var colorTheme: StarfieldColor
     var density: StarfieldDensity
@@ -173,6 +220,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         spawnBackgroundStars()
         spawnGalaxies()
         spawnNebulae()
+        spawnPlanets()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -218,19 +266,25 @@ class StarfieldWarpView: NSView, ScreensaverContent {
 
         // Distance tiers create depth perception: big bright galaxies feel
         // close, small dim ones feel far away. Each tier is (widthRange,
-        // heightRange, alphaRange). Shuffled so layouts vary per launch.
+        // heightRange, alphaRange). Count is randomized 2–5 per launch
+        // (always 1 NEAR guaranteed + 1–4 random MID/FAR fillers) so each
+        // scene has a different cosmic mood.
         typealias Tier = (
             widthRange: ClosedRange<CGFloat>,
             heightRange: ClosedRange<CGFloat>,
             alphaRange: ClosedRange<CGFloat>
         )
-        var tiers: [Tier] = [
-            (480...700, 150...230, 0.40...0.55),  // NEAR — 1 big, bright, dominant
-            (300...440, 100...170, 0.28...0.42),  // MID — 2 medium
-            (300...440, 100...170, 0.28...0.42),
-            (150...260, 55...110, 0.18...0.30),   // FAR — 2 small, dim
-            (150...260, 55...110, 0.18...0.30),
-        ]
+        let nearTier: Tier = (480...700, 150...230, 0.40...0.55)
+        let midTier:  Tier = (300...440, 100...170, 0.28...0.42)
+        let farTier:  Tier = (150...260, 55...110,  0.18...0.30)
+
+        // Always include one NEAR galaxy as the focal point.
+        var tiers: [Tier] = [nearTier]
+        let extraCount = Int.random(in: 1...4)  // 1–4 extras → total 2–5 galaxies
+        for _ in 0..<extraCount {
+            // Weight slightly toward mid so the scene isn't mostly tiny specks.
+            tiers.append(CGFloat.random(in: 0...1) < 0.6 ? midTier : farTier)
+        }
         tiers.shuffle()
 
         // Track which palettes are used so we get color variety across
@@ -299,6 +353,72 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 color: color,
                 maxAlpha: CGFloat.random(in: 0.08...0.16),
                 pulsePhase: CGFloat.random(in: 0...(2 * .pi))
+            ))
+        }
+    }
+
+    func spawnPlanets() {
+        planets = []
+
+        // Count is driven by Prefs: "random" = 0–3 randomly, or a fixed "0"/"1"/"2"/"3".
+        let count: Int
+        switch Prefs.starfieldPlanetsCount {
+        case "0": count = 0
+        case "1": count = 1
+        case "2": count = 2
+        case "3": count = 3
+        default:  count = Int.random(in: 0...3)   // "random"
+        }
+        guard count > 0 else { return }
+
+        // Unique types per planet — draw from a shuffled stack so the
+        // same planet type doesn't appear twice in one scene.
+        var availableTypes = PlanetType.allCases.shuffled()
+
+        let cx = bounds.width / 2
+        let cy = bounds.height / 2
+        let minDistFromCenter = min(bounds.width, bounds.height) * 0.22
+        let minDistFromGalaxies: CGFloat = 180
+        let minDistFromOtherPlanets: CGFloat = 200
+        let edgePadding: CGFloat = 90
+
+        for _ in 0..<count {
+            if availableTypes.isEmpty {
+                availableTypes = PlanetType.allCases.shuffled()
+            }
+            let type = availableTypes.removeLast()
+
+            var posX: CGFloat = 0
+            var posY: CGFloat = 0
+            var attempts = 0
+            while attempts < 40 {
+                posX = CGFloat.random(in: edgePadding...(bounds.width - edgePadding))
+                posY = CGFloat.random(in: edgePadding...(bounds.height - edgePadding))
+                let okFromCenter = hypot(posX - cx, posY - cy) >= minDistFromCenter
+                let okFromGalaxies = galaxies.allSatisfy {
+                    hypot(posX - $0.centerX, posY - $0.centerY) >= minDistFromGalaxies
+                }
+                let okFromPlanets = planets.allSatisfy {
+                    hypot(posX - $0.centerX, posY - $0.centerY) >= minDistFromOtherPlanets
+                }
+                if okFromCenter && okFromGalaxies && okFromPlanets { break }
+                attempts += 1
+            }
+
+            let radius = CGFloat.random(in: type.sizeRange)
+            let hasMoon = CGFloat.random(in: 0...1) < 0.4   // ~40% chance
+
+            planets.append(Planet(
+                centerX: posX,
+                centerY: posY,
+                radius: radius,
+                type: type,
+                baseColor: type.baseColor,
+                hasMoon: hasMoon,
+                moonDistance: radius * CGFloat.random(in: 1.8...2.4),
+                moonRadius: CGFloat.random(in: 4...9),
+                moonBasePhase: CGFloat.random(in: 0...(2 * .pi)),
+                moonOrbitSpeed: CGFloat.random(in: 0.08...0.25)  // slow orbit
             ))
         }
     }
@@ -548,6 +668,114 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                     width: star.size,
                     height: star.size
                 ))
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // PLANETS — closer "mid-distance" objects
+        // Rendered after background stars (dust sits behind planets) but
+        // before warp streaks (so streaks pass over the planets). Each
+        // planet has a 3D-lit radial gradient body, optional Saturn ring,
+        // and optional slowly orbiting moon.
+        // ──────────────────────────────────────────────
+        if Prefs.starfieldPlanets && !planets.isEmpty {
+            let planetColorSpace = CGColorSpaceCreateDeviceRGB()
+            let now = CGFloat(CACurrentMediaTime())
+
+            for planet in planets {
+                // 1. Saturn-style ring drawn BEHIND the planet body (back half of the ring).
+                if planet.type.hasRing {
+                    let ringWidth = planet.radius * 3.6
+                    let ringHeight = planet.radius * 0.55
+                    context.saveGState()
+                    context.translateBy(x: planet.centerX, y: planet.centerY)
+                    context.rotate(by: -0.18)   // slight tilt
+                    // Back half of ring (behind planet) — slightly dimmer.
+                    context.setStrokeColor(NSColor(red: 0.85, green: 0.8, blue: 0.65, alpha: 0.55).cgColor)
+                    context.setLineWidth(2.5)
+                    context.strokeEllipse(in: CGRect(x: -ringWidth/2, y: -ringHeight/2, width: ringWidth, height: ringHeight))
+                    // Inner rim
+                    context.setStrokeColor(NSColor(red: 0.95, green: 0.88, blue: 0.70, alpha: 0.35).cgColor)
+                    context.setLineWidth(1.0)
+                    let inner = CGRect(x: -ringWidth/2 + 5, y: -ringHeight/2 + 1.5, width: ringWidth - 10, height: ringHeight - 3)
+                    context.strokeEllipse(in: inner)
+                    context.restoreGState()
+                }
+
+                // 2. Planet body — 3D gradient (highlight offset to upper-left, shadow at lower-right).
+                let highlight = planet.baseColor.blended(withFraction: 0.35, of: .white) ?? planet.baseColor
+                let shadow = planet.baseColor.blended(withFraction: 0.55, of: .black) ?? planet.baseColor
+                let colors = [
+                    highlight.cgColor,
+                    planet.baseColor.cgColor,
+                    shadow.cgColor
+                ]
+                let locations: [CGFloat] = [0, 0.55, 1]
+                if let gradient = CGGradient(colorsSpace: planetColorSpace, colors: colors as CFArray, locations: locations) {
+                    let lightOffset = CGPoint(x: -planet.radius * 0.35, y: planet.radius * 0.35)
+                    context.saveGState()
+                    // Clip to planet circle so the gradient doesn't bleed past the edge.
+                    let planetRect = CGRect(
+                        x: planet.centerX - planet.radius,
+                        y: planet.centerY - planet.radius,
+                        width: planet.radius * 2,
+                        height: planet.radius * 2
+                    )
+                    context.addEllipse(in: planetRect)
+                    context.clip()
+                    context.drawRadialGradient(
+                        gradient,
+                        startCenter: CGPoint(x: planet.centerX + lightOffset.x, y: planet.centerY + lightOffset.y),
+                        startRadius: 0,
+                        endCenter: CGPoint(x: planet.centerX, y: planet.centerY),
+                        endRadius: planet.radius,
+                        options: []
+                    )
+                    context.restoreGState()
+
+                    // Subtle darker rim around the whole planet for definition.
+                    context.setStrokeColor(NSColor(white: 0, alpha: 0.35).cgColor)
+                    context.setLineWidth(0.8)
+                    context.strokeEllipse(in: planetRect)
+                }
+
+                // 3. Front half of ring (in front of planet body) for ringed giants.
+                if planet.type.hasRing {
+                    let ringWidth = planet.radius * 3.6
+                    let ringHeight = planet.radius * 0.55
+                    context.saveGState()
+                    context.translateBy(x: planet.centerX, y: planet.centerY)
+                    context.rotate(by: -0.18)
+                    // Clip to the bottom half so only the "front" of the ring shows over the body.
+                    context.clip(to: CGRect(x: -ringWidth, y: 0, width: ringWidth * 2, height: ringHeight))
+                    context.setStrokeColor(NSColor(red: 0.95, green: 0.88, blue: 0.70, alpha: 0.75).cgColor)
+                    context.setLineWidth(2.5)
+                    context.strokeEllipse(in: CGRect(x: -ringWidth/2, y: -ringHeight/2, width: ringWidth, height: ringHeight))
+                    context.restoreGState()
+                }
+
+                // 4. Orbiting moon — small bright dot that circles the planet over time.
+                if planet.hasMoon {
+                    let phase = planet.moonBasePhase + now * planet.moonOrbitSpeed
+                    let moonX = planet.centerX + cos(phase) * planet.moonDistance
+                    let moonY = planet.centerY + sin(phase) * planet.moonDistance
+                    // Subtle glow around the moon
+                    context.setFillColor(NSColor(white: 0.95, alpha: 0.25).cgColor)
+                    context.fillEllipse(in: CGRect(
+                        x: moonX - planet.moonRadius * 1.8,
+                        y: moonY - planet.moonRadius * 1.8,
+                        width: planet.moonRadius * 3.6,
+                        height: planet.moonRadius * 3.6
+                    ))
+                    // Moon body
+                    context.setFillColor(NSColor(white: 0.9, alpha: 0.98).cgColor)
+                    context.fillEllipse(in: CGRect(
+                        x: moonX - planet.moonRadius,
+                        y: moonY - planet.moonRadius,
+                        width: planet.moonRadius * 2,
+                        height: planet.moonRadius * 2
+                    ))
+                }
             }
         }
 

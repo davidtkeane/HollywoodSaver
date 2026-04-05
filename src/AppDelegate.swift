@@ -586,6 +586,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         nebulaeToggle.state = Prefs.starfieldNebulae ? .on : .off
         starfieldBackdropMenu.addItem(nebulaeToggle)
 
+        // Planets submenu with Show toggle + count override
+        starfieldBackdropMenu.addItem(NSMenuItem.separator())
+        let planetsItem = NSMenuItem(title: "Planets", action: nil, keyEquivalent: "")
+        let planetsMenu = NSMenu()
+
+        let planetsShowToggle = NSMenuItem(title: "Show Planets", action: #selector(toggleStarfieldPlanets), keyEquivalent: "")
+        planetsShowToggle.state = Prefs.starfieldPlanets ? .on : .off
+        planetsMenu.addItem(planetsShowToggle)
+
+        planetsMenu.addItem(NSMenuItem.separator())
+
+        let countOptions: [(String, String)] = [
+            ("Random (0–3)", "random"),
+            ("None",         "0"),
+            ("1 Planet",     "1"),
+            ("2 Planets",    "2"),
+            ("3 Planets",    "3"),
+        ]
+        for (label, value) in countOptions {
+            let item = NSMenuItem(title: label, action: #selector(setStarfieldPlanetsCount(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.starfieldPlanetsCount == value ? .on : .off
+            planetsMenu.addItem(item)
+        }
+
+        planetsItem.submenu = planetsMenu
+        starfieldBackdropMenu.addItem(planetsItem)
+
         starfieldBackdropItem.submenu = starfieldBackdropMenu
         starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
 
@@ -1578,6 +1606,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleStarfieldNebulae() {
         Prefs.starfieldNebulae = !Prefs.starfieldNebulae
+    }
+
+    @objc func toggleStarfieldPlanets() {
+        Prefs.starfieldPlanets = !Prefs.starfieldPlanets
+    }
+
+    @objc func setStarfieldPlanetsCount(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.starfieldPlanetsCount = value
     }
 
     // MARK: - Break Reminder
