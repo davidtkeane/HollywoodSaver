@@ -5,1114 +5,7 @@ import ImageIO
 import ServiceManagement
 import CryptoKit
 import IOKit.pwr_mgt
-
-// MARK: - Custom Window (borderless windows need this to receive key events)
-
-class ScreensaverWindow: NSWindow {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
-}
-
-// MARK: - Screensaver Content Protocol
-
-protocol ScreensaverContent {
-    func startPlayback()
-    func stopPlayback()
-}
-
-// MARK: - Video Player View
-
-class VideoPlayerView: NSView, ScreensaverContent {
-    var queuePlayer: AVQueuePlayer!
-    var playerLooper: AVPlayerLooper?
-    var playerLayer: AVPlayerLayer!
-    var onPlaybackEnded: (() -> Void)?
-    var endObserver: Any?
-
-    init(frame: NSRect, videoURL: URL, muted: Bool = true, volume: Float = 1.0, loop: Bool = true, onEnded: (() -> Void)? = nil) {
-        super.init(frame: frame)
-        wantsLayer = true
-        onPlaybackEnded = onEnded
-
-        let item = AVPlayerItem(url: videoURL)
-        queuePlayer = AVQueuePlayer()
-        queuePlayer.isMuted = muted
-        queuePlayer.volume = volume
-
-        if loop {
-            playerLooper = AVPlayerLooper(player: queuePlayer, templateItem: item)
-        } else {
-            queuePlayer.insert(item, after: nil)
-            endObserver = NotificationCenter.default.addObserver(
-                forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
-            ) { [weak self] _ in
-                self?.onPlaybackEnded?()
-            }
-        }
-
-        playerLayer = AVPlayerLayer(player: queuePlayer)
-        playerLayer.videoGravity = .resizeAspectFill
-        playerLayer.frame = bounds
-        layer!.addSublayer(playerLayer)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func layout() {
-        super.layout()
-        playerLayer.frame = bounds
-    }
-
-    func startPlayback() {
-        queuePlayer.play()
-    }
-
-    func stopPlayback() {
-        queuePlayer.pause()
-        queuePlayer.seek(to: .zero)
-        if let obs = endObserver {
-            NotificationCenter.default.removeObserver(obs)
-            endObserver = nil
-        }
-    }
-}
-
-// MARK: - GIF Player View
-
-class GifPlayerView: NSView, ScreensaverContent {
-    var imageView: NSImageView!
-    var displayLink: CVDisplayLink?
-    var frames: [(image: CGImage, delay: Double)] = []
-    var currentFrame = 0
-    var elapsed: Double = 0
-    var lastTimestamp: Double = 0
-
-    init(frame: NSRect, gifURL: URL) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
-
-        imageView = NSImageView(frame: bounds)
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.autoresizingMask = [.width, .height]
-        addSubview(imageView)
-
-        loadGif(url: gifURL)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func loadGif(url: URL) {
-        guard let data = try? Data(contentsOf: url),
-              let source = CGImageSourceCreateWithData(data as CFData, nil) else { return }
-
-        let count = CGImageSourceGetCount(source)
-        for i in 0..<count {
-            guard let cgImage = CGImageSourceCreateImageAtIndex(source, i, nil) else { continue }
-            let props = CGImageSourceCopyPropertiesAtIndex(source, i, nil) as? [CFString: Any]
-            let gifProps = props?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
-            let delay = (gifProps?[kCGImagePropertyGIFUnclampedDelayTime] as? Double)
-                ?? (gifProps?[kCGImagePropertyGIFDelayTime] as? Double)
-                ?? 0.1
-            frames.append((image: cgImage, delay: max(delay, 0.02)))
-        }
-
-        if let first = frames.first {
-            imageView.image = NSImage(cgImage: first.image, size: NSSize(width: first.image.width, height: first.image.height))
-        }
-    }
-
-    func startPlayback() {
-        guard !frames.isEmpty else { return }
-        currentFrame = 0
-        elapsed = 0
-        lastTimestamp = 0
-
-        CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
-        guard let link = displayLink else { return }
-
-        let callback: CVDisplayLinkOutputCallback = { _, inNow, _, _, _, userInfo -> CVReturn in
-            let view = Unmanaged<GifPlayerView>.fromOpaque(userInfo!).takeUnretainedValue()
-            let timestamp = Double(inNow.pointee.videoTime) / Double(inNow.pointee.videoTimeScale)
-
-            if view.lastTimestamp == 0 {
-                view.lastTimestamp = timestamp
-            }
-            let dt = timestamp - view.lastTimestamp
-            view.lastTimestamp = timestamp
-            view.elapsed += dt
-
-            if view.elapsed >= view.frames[view.currentFrame].delay {
-                view.elapsed -= view.frames[view.currentFrame].delay
-                view.currentFrame = (view.currentFrame + 1) % view.frames.count
-                let frame = view.frames[view.currentFrame]
-                let img = NSImage(cgImage: frame.image, size: NSSize(width: frame.image.width, height: frame.image.height))
-                DispatchQueue.main.async {
-                    view.imageView.image = img
-                }
-            }
-            return kCVReturnSuccess
-        }
-
-        let pointer = Unmanaged.passUnretained(self).toOpaque()
-        CVDisplayLinkSetOutputCallback(link, callback, pointer)
-        CVDisplayLinkStart(link)
-    }
-
-    func stopPlayback() {
-        if let link = displayLink {
-            CVDisplayLinkStop(link)
-            displayLink = nil
-        }
-    }
-}
-
-// MARK: - Matrix Rain Configuration
-
-enum MatrixColorTheme: String, CaseIterable {
-    case green = "Classic Green"
-    case blue = "Blue"
-    case red = "Red"
-    case amber = "Amber"
-    case white = "White"
-    case rainbow = "Rainbow"
-
-    var primaryColor: NSColor {
-        switch self {
-        case .green:   return NSColor(red: 0, green: 1, blue: 0, alpha: 1)
-        case .blue:    return NSColor(red: 0.2, green: 0.6, blue: 1, alpha: 1)
-        case .red:     return NSColor(red: 1, green: 0.2, blue: 0.2, alpha: 1)
-        case .amber:   return NSColor(red: 1, green: 0.75, blue: 0, alpha: 1)
-        case .white:   return NSColor.white
-        case .rainbow: return NSColor.green
-        }
-    }
-}
-
-enum MatrixSpeed: String, CaseIterable {
-    case slow = "Slow"
-    case medium = "Medium"
-    case fast = "Fast"
-
-    var updatesPerSecond: Double {
-        switch self {
-        case .slow:   return 8
-        case .medium: return 15
-        case .fast:   return 25
-        }
-    }
-}
-
-enum MatrixCharacterSet: String, CaseIterable {
-    case katakana = "Katakana"
-    case latin = "Latin"
-    case numbers = "Numbers"
-    case mixed = "Mixed"
-}
-
-enum MatrixDensity: String, CaseIterable {
-    case light = "Light"
-    case medium = "Medium"
-    case heavy = "Heavy"
-
-    var columnSkip: Int {
-        switch self {
-        case .light:  return 3
-        case .medium: return 2
-        case .heavy:  return 1
-        }
-    }
-}
-
-enum MatrixFontSize: String, CaseIterable {
-    case small = "Small"
-    case medium = "Medium"
-    case large = "Large"
-
-    var pointSize: CGFloat {
-        switch self {
-        case .small:  return 10
-        case .medium: return 14
-        case .large:  return 20
-        }
-    }
-}
-
-enum MatrixTrailLength: String, CaseIterable {
-    case short = "Short"
-    case medium = "Medium"
-    case long = "Long"
-
-    var fadeSteps: Int {
-        switch self {
-        case .short:  return 8
-        case .medium: return 16
-        case .long:   return 30
-        }
-    }
-}
-
-// MARK: - Matrix Rain View
-
-class MatrixRainView: NSView, ScreensaverContent {
-    struct RainColumn {
-        var headRow: Int
-        var speed: Double
-        var characters: [Character]
-        var length: Int
-        var active: Bool
-        var hue: CGFloat
-        var delay: Double
-    }
-
-    var colorTheme: MatrixColorTheme
-    var speed: MatrixSpeed
-    var charSet: MatrixCharacterSet
-    var density: MatrixDensity
-    var fontSize: MatrixFontSize
-    var trailLength: MatrixTrailLength
-
-    var cellWidth: CGFloat
-    var cellHeight: CGFloat
-    var numColumns: Int
-    var numRows: Int
-
-    var columns: [RainColumn] = []
-    var displayLink: CVDisplayLink?
-    var lastTimestamp: Double = 0
-    var elapsed: Double = 0
-    var characterPool: [Character] = []
-    var flickerCounter = 0
-
-    override init(frame: NSRect) {
-        colorTheme = MatrixColorTheme(rawValue: Prefs.matrixColorTheme) ?? .green
-        speed = MatrixSpeed(rawValue: Prefs.matrixSpeed) ?? .medium
-        charSet = MatrixCharacterSet(rawValue: Prefs.matrixCharacterSet) ?? .katakana
-        density = MatrixDensity(rawValue: Prefs.matrixDensity) ?? .medium
-        fontSize = MatrixFontSize(rawValue: Prefs.matrixFontSize) ?? .medium
-        trailLength = MatrixTrailLength(rawValue: Prefs.matrixTrailLength) ?? .medium
-
-        let ptSize = fontSize.pointSize
-        cellWidth = ptSize * 0.7
-        cellHeight = ptSize * 1.2
-        numColumns = max(1, Int(frame.width / cellWidth))
-        numRows = max(1, Int(frame.height / cellHeight))
-
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
-
-        characterPool = buildCharacterPool()
-        setupColumns()
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func buildCharacterPool() -> [Character] {
-        var pool: [Character] = []
-        switch charSet {
-        case .katakana:
-            for scalar in 0x30A0...0x30FF {
-                if let u = Unicode.Scalar(scalar) { pool.append(Character(u)) }
-            }
-        case .latin:
-            for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { pool.append(c) }
-        case .numbers:
-            for c in "0123456789" { pool.append(c) }
-        case .mixed:
-            for scalar in 0x30A0...0x30FF {
-                if let u = Unicode.Scalar(scalar) { pool.append(Character(u)) }
-            }
-            for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" { pool.append(c) }
-        }
-        return pool
-    }
-
-    func randomCharacter() -> Character {
-        characterPool[Int.random(in: 0..<characterPool.count)]
-    }
-
-    func setupColumns() {
-        columns = []
-        for col in 0..<numColumns {
-            let active = (col % density.columnSkip == 0)
-            let chars = (0..<(numRows + trailLength.fadeSteps)).map { _ in randomCharacter() }
-            let baseLength = trailLength.fadeSteps
-            let length = baseLength + Int.random(in: -baseLength/4...baseLength/4)
-            columns.append(RainColumn(
-                headRow: Int.random(in: -numRows...0),
-                speed: Double.random(in: 0.7...1.3),
-                characters: chars,
-                length: max(4, length),
-                active: active,
-                hue: CGFloat.random(in: 0...1),
-                delay: Double.random(in: 0...2)
-            ))
-        }
-    }
-
-    func startPlayback() {
-        lastTimestamp = 0
-        elapsed = 0
-
-        CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
-        guard let link = displayLink else { return }
-
-        let callback: CVDisplayLinkOutputCallback = { _, inNow, _, _, _, userInfo -> CVReturn in
-            let view = Unmanaged<MatrixRainView>.fromOpaque(userInfo!).takeUnretainedValue()
-            let timestamp = Double(inNow.pointee.videoTime) / Double(inNow.pointee.videoTimeScale)
-
-            if view.lastTimestamp == 0 { view.lastTimestamp = timestamp }
-            let dt = timestamp - view.lastTimestamp
-            view.lastTimestamp = timestamp
-
-            DispatchQueue.main.async {
-                view.updateState(dt: dt)
-                view.setNeedsDisplay(view.bounds)
-            }
-            return kCVReturnSuccess
-        }
-
-        let pointer = Unmanaged.passUnretained(self).toOpaque()
-        CVDisplayLinkSetOutputCallback(link, callback, pointer)
-        CVDisplayLinkStart(link)
-    }
-
-    func stopPlayback() {
-        if let link = displayLink {
-            CVDisplayLinkStop(link)
-            displayLink = nil
-        }
-    }
-
-    func updateState(dt: Double) {
-        elapsed += dt
-        let interval = 1.0 / speed.updatesPerSecond
-        guard elapsed >= interval else { return }
-        elapsed -= interval
-        flickerCounter += 1
-
-        for i in 0..<columns.count {
-            guard columns[i].active else { continue }
-
-            if columns[i].delay > 0 {
-                columns[i].delay -= interval
-                continue
-            }
-
-            columns[i].headRow += 1
-
-            // Flicker: swap a random character in the trail every few ticks
-            if flickerCounter % 3 == 0 {
-                let idx = Int.random(in: 0..<columns[i].characters.count)
-                columns[i].characters[idx] = randomCharacter()
-            }
-
-            // Reset column when it's fully off screen
-            if columns[i].headRow > numRows + columns[i].length {
-                columns[i].headRow = Int.random(in: -columns[i].length...0)
-                columns[i].speed = Double.random(in: 0.7...1.3)
-                columns[i].delay = Double.random(in: 0...1.5)
-                if colorTheme == .rainbow {
-                    columns[i].hue = CGFloat.random(in: 0...1)
-                }
-            }
-        }
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        context.setFillColor(NSColor.black.cgColor)
-        context.fill(bounds)
-
-        let font = CTFontCreateWithName("Menlo" as CFString, fontSize.pointSize, nil)
-
-        for (colIndex, column) in columns.enumerated() where column.active && column.delay <= 0 {
-            let x = CGFloat(colIndex) * cellWidth
-
-            for rowOffset in 0...column.length {
-                let row = column.headRow - rowOffset
-                guard row >= 0, row < numRows else { continue }
-
-                let y = bounds.height - CGFloat(row + 1) * cellHeight
-
-                let color: NSColor
-                if rowOffset == 0 {
-                    color = NSColor.white
-                } else {
-                    let alpha = CGFloat(max(0, 1.0 - Double(rowOffset) / Double(column.length)))
-                    if colorTheme == .rainbow {
-                        color = NSColor(hue: column.hue, saturation: 1, brightness: 1, alpha: alpha)
-                    } else {
-                        color = colorTheme.primaryColor.withAlphaComponent(alpha)
-                    }
-                }
-
-                let charIndex = abs(row + colIndex) % column.characters.count
-                let char = String(column.characters[charIndex])
-
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: font as Any,
-                    .foregroundColor: color,
-                ]
-                let attrStr = NSAttributedString(string: char, attributes: attrs)
-                let line = CTLineCreateWithAttributedString(attrStr)
-
-                context.textPosition = CGPoint(x: x, y: y)
-                CTLineDraw(line, context)
-            }
-        }
-    }
-}
-
-// MARK: - Input Monitor
-
-class InputMonitor {
-    var onDismiss: () -> Void
-    var globalMonitor: Any?
-    var localMonitor: Any?
-    var initialMouseLocation: NSPoint?
-    let movementThreshold: CGFloat = 5.0
-    var isDismissing = false
-
-    init(onDismiss: @escaping () -> Void) {
-        self.onDismiss = onDismiss
-    }
-
-    func start() {
-        isDismissing = false
-        initialMouseLocation = NSEvent.mouseLocation
-
-        let mask: NSEvent.EventTypeMask = [
-            .mouseMoved, .leftMouseDown, .rightMouseDown,
-            .otherMouseDown, .scrollWheel, .keyDown
-        ]
-
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            self?.handleEvent(event)
-            return event
-        }
-
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
-            self?.handleEvent(event)
-        }
-    }
-
-    func handleEvent(_ event: NSEvent) {
-        guard !isDismissing else { return }
-
-        switch event.type {
-        case .keyDown:
-            if event.keyCode == 53 { // Escape
-                dismiss()
-            }
-        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
-            dismiss()
-        case .mouseMoved, .scrollWheel:
-            guard let initial = initialMouseLocation else { return }
-            let current = NSEvent.mouseLocation
-            let dx = abs(current.x - initial.x)
-            let dy = abs(current.y - initial.y)
-            if dx > movementThreshold || dy > movementThreshold {
-                dismiss()
-            }
-        default:
-            break
-        }
-    }
-
-    func dismiss() {
-        isDismissing = true
-        onDismiss()
-    }
-
-    func stop() {
-        if let m = globalMonitor { NSEvent.removeMonitor(m) }
-        if let m = localMonitor { NSEvent.removeMonitor(m) }
-        globalMonitor = nil
-        localMonitor = nil
-    }
-}
-
-// MARK: - Preferences
-
-class Prefs {
-    static let defaults = UserDefaults.standard
-    static let volumeKey = "volume"
-    static let soundKey = "soundEnabled"
-    static let launchAtLoginKey = "launchAtLogin"
-    static let opacityKey = "ambientOpacity"
-
-    static var volume: Float {
-        get { defaults.object(forKey: volumeKey) != nil ? defaults.float(forKey: volumeKey) : 0.5 }
-        set { defaults.set(newValue, forKey: volumeKey) }
-    }
-    static var soundEnabled: Bool {
-        get { defaults.bool(forKey: soundKey) }
-        set { defaults.set(newValue, forKey: soundKey) }
-    }
-    static var launchAtLogin: Bool {
-        get { defaults.bool(forKey: launchAtLoginKey) }
-        set { defaults.set(newValue, forKey: launchAtLoginKey) }
-    }
-    static var ambientOpacity: Float {
-        get { defaults.object(forKey: opacityKey) != nil ? defaults.float(forKey: opacityKey) : 1.0 }
-        set { defaults.set(newValue, forKey: opacityKey) }
-    }
-    static var loopEnabled: Bool {
-        get { defaults.object(forKey: "loopEnabled") != nil ? defaults.bool(forKey: "loopEnabled") : true }
-        set { defaults.set(newValue, forKey: "loopEnabled") }
-    }
-    static var autoPlayEnabled: Bool {
-        get { defaults.bool(forKey: "autoPlayEnabled") }
-        set { defaults.set(newValue, forKey: "autoPlayEnabled") }
-    }
-    static var lastMediaFilename: String? {
-        get { defaults.string(forKey: "lastMediaFilename") }
-        set { defaults.set(newValue, forKey: "lastMediaFilename") }
-    }
-    static var lastPlayMode: String? {
-        get { defaults.string(forKey: "lastPlayMode") }
-        set { defaults.set(newValue, forKey: "lastPlayMode") }
-    }
-
-    // Matrix Rain preferences
-    static var matrixColorTheme: String {
-        get { defaults.string(forKey: "matrixColorTheme") ?? "Classic Green" }
-        set { defaults.set(newValue, forKey: "matrixColorTheme") }
-    }
-    static var matrixSpeed: String {
-        get { defaults.string(forKey: "matrixSpeed") ?? "Medium" }
-        set { defaults.set(newValue, forKey: "matrixSpeed") }
-    }
-    static var matrixCharacterSet: String {
-        get { defaults.string(forKey: "matrixCharacterSet") ?? "Katakana" }
-        set { defaults.set(newValue, forKey: "matrixCharacterSet") }
-    }
-    static var matrixDensity: String {
-        get { defaults.string(forKey: "matrixDensity") ?? "Medium" }
-        set { defaults.set(newValue, forKey: "matrixDensity") }
-    }
-    static var matrixFontSize: String {
-        get { defaults.string(forKey: "matrixFontSize") ?? "Medium" }
-        set { defaults.set(newValue, forKey: "matrixFontSize") }
-    }
-    static var matrixTrailLength: String {
-        get { defaults.string(forKey: "matrixTrailLength") ?? "Medium" }
-        set { defaults.set(newValue, forKey: "matrixTrailLength") }
-    }
-
-    // Rain Effects
-    static var rainOverlayEnabled: Bool {
-        get { defaults.bool(forKey: "rainOverlayEnabled") }
-        set { defaults.set(newValue, forKey: "rainOverlayEnabled") }
-    }
-    static var rainOverlayOpacity: Float {
-        get { defaults.object(forKey: "rainOverlayOpacity") != nil ? defaults.float(forKey: "rainOverlayOpacity") : 0.15 }
-        set { defaults.set(newValue, forKey: "rainOverlayOpacity") }
-    }
-    static var rainBehindEnabled: Bool {
-        get { defaults.bool(forKey: "rainBehindEnabled") }
-        set { defaults.set(newValue, forKey: "rainBehindEnabled") }
-    }
-    static var rainBehindOpacity: Float {
-        get { defaults.object(forKey: "rainBehindOpacity") != nil ? defaults.float(forKey: "rainBehindOpacity") : 1.0 }
-        set { defaults.set(newValue, forKey: "rainBehindOpacity") }
-    }
-    static var rainScreen: String {
-        get { defaults.string(forKey: "rainScreen") ?? "all" }
-        set { defaults.set(newValue, forKey: "rainScreen") }
-    }
-
-    // Clock overlay
-    static var clockEnabled: Bool {
-        get { defaults.bool(forKey: "clockEnabled") }
-        set { defaults.set(newValue, forKey: "clockEnabled") }
-    }
-    static var clockShowDate: Bool {
-        get { defaults.bool(forKey: "clockShowDate") }
-        set { defaults.set(newValue, forKey: "clockShowDate") }
-    }
-    static var clockScreen: String {
-        get { defaults.string(forKey: "clockScreen") ?? "all" }
-        set { defaults.set(newValue, forKey: "clockScreen") }
-    }
-    static var clockPosition: String {
-        get { defaults.string(forKey: "clockPosition") ?? "topLeft" }
-        set { defaults.set(newValue, forKey: "clockPosition") }
-    }
-    static var clockColor: String {
-        get { defaults.string(forKey: "clockColor") ?? "Green" }
-        set { defaults.set(newValue, forKey: "clockColor") }
-    }
-    static var clockSize: String {
-        get { defaults.string(forKey: "clockSize") ?? "Normal" }
-        set { defaults.set(newValue, forKey: "clockSize") }
-    }
-
-    // Break reminder
-    static var breakDuration: Int {
-        get { let v = defaults.integer(forKey: "breakDuration"); return v > 0 ? v : 60 }
-        set { defaults.set(newValue, forKey: "breakDuration") }
-    }
-    static var countdownScreen: String {
-        get { defaults.string(forKey: "countdownScreen") ?? "all" }
-        set { defaults.set(newValue, forKey: "countdownScreen") }
-    }
-    static var countdownPosition: String {
-        get { defaults.string(forKey: "countdownPosition") ?? "topRight" }
-        set { defaults.set(newValue, forKey: "countdownPosition") }
-    }
-    static var countdownColor: String {
-        get { defaults.string(forKey: "countdownColor") ?? "Green" }
-        set { defaults.set(newValue, forKey: "countdownColor") }
-    }
-    static var countdownSize: String {
-        get { defaults.string(forKey: "countdownSize") ?? "Normal" }
-        set { defaults.set(newValue, forKey: "countdownSize") }
-    }
-    static var customPresets: [Int] {
-        get { defaults.array(forKey: "breakPresets") as? [Int] ?? [] }
-        set { defaults.set(newValue, forKey: "breakPresets") }
-    }
-    static var breakSoundEnabled: Bool {
-        get { defaults.object(forKey: "breakSoundEnabled") != nil ? defaults.bool(forKey: "breakSoundEnabled") : true }
-        set { defaults.set(newValue, forKey: "breakSoundEnabled") }
-    }
-    static var breakSoundName: String {
-        get { defaults.string(forKey: "breakSoundName") ?? "Glass" }
-        set { defaults.set(newValue, forKey: "breakSoundName") }
-    }
-    static var breakScreenEnabled: Bool {
-        get { defaults.object(forKey: "breakScreenEnabled") != nil ? defaults.bool(forKey: "breakScreenEnabled") : true }
-        set { defaults.set(newValue, forKey: "breakScreenEnabled") }
-    }
-    static var resumeAfterBreak: Bool {
-        get { defaults.object(forKey: "resumeAfterBreak") != nil ? defaults.bool(forKey: "resumeAfterBreak") : true }
-        set { defaults.set(newValue, forKey: "resumeAfterBreak") }
-    }
-    static var showDockIcon: Bool {
-        get { defaults.bool(forKey: "showDockIcon") }
-        set { defaults.set(newValue, forKey: "showDockIcon") }
-    }
-    static var showDesktopShortcut: Bool {
-        get { defaults.bool(forKey: "showDesktopShortcut") }
-        set { defaults.set(newValue, forKey: "showDesktopShortcut") }
-    }
-    static var sleepCountdownEnabled: Bool {
-        get { defaults.object(forKey: "sleepCountdownEnabled") != nil ? defaults.bool(forKey: "sleepCountdownEnabled") : true }
-        set { defaults.set(newValue, forKey: "sleepCountdownEnabled") }
-    }
-    static var resumeAfterSleep: Bool {
-        get { defaults.object(forKey: "resumeAfterSleep") != nil ? defaults.bool(forKey: "resumeAfterSleep") : true }
-        set { defaults.set(newValue, forKey: "resumeAfterSleep") }
-    }
-    static var pomodoroWork: Int {
-        get { let v = defaults.integer(forKey: "pomodoroWork"); return v > 0 ? v : 25 }
-        set { defaults.set(newValue, forKey: "pomodoroWork") }
-    }
-    static var pomodoroBreak: Int {
-        get { let v = defaults.integer(forKey: "pomodoroBreak"); return v > 0 ? v : 5 }
-        set { defaults.set(newValue, forKey: "pomodoroBreak") }
-    }
-    static var breaksTakenToday: Int {
-        get {
-            let lastDate = defaults.string(forKey: "breakStatsDate") ?? ""
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            let today = formatter.string(from: Date())
-            if lastDate != today { return 0 }
-            return defaults.integer(forKey: "breaksTakenToday")
-        }
-        set {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            defaults.set(formatter.string(from: Date()), forKey: "breakStatsDate")
-            defaults.set(newValue, forKey: "breaksTakenToday")
-        }
-    }
-    static var totalBreaksTaken: Int {
-        get { defaults.integer(forKey: "totalBreaksTaken") }
-        set { defaults.set(newValue, forKey: "totalBreaksTaken") }
-    }
-
-    // Version check cache
-    static var lastVersionCheckDate: Double {
-        get { defaults.double(forKey: "lastVersionCheckDate") }
-        set { defaults.set(newValue, forKey: "lastVersionCheckDate") }
-    }
-    static var cachedLatestVersion: String? {
-        get { defaults.string(forKey: "cachedLatestVersion") }
-        set { defaults.set(newValue, forKey: "cachedLatestVersion") }
-    }
-    static var lastNotifiedVersion: String? {
-        get { defaults.string(forKey: "lastNotifiedVersion") }
-        set { defaults.set(newValue, forKey: "lastNotifiedVersion") }
-    }
-
-    // Lock screen password
-    static var lockPasswordHash: String? {
-        get { defaults.string(forKey: "lockPasswordHash") }
-        set { defaults.set(newValue, forKey: "lockPasswordHash") }
-    }
-    static var lockPasswordSalt: String? {
-        get { defaults.string(forKey: "lockPasswordSalt") }
-        set { defaults.set(newValue, forKey: "lockPasswordSalt") }
-    }
-    static var hasLockPassword: Bool {
-        return lockPasswordHash != nil && lockPasswordSalt != nil
-    }
-    static func setLockPassword(_ password: String) {
-        let saltData = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
-        let salt = saltData.map { String(format: "%02x", $0) }.joined()
-        let combined = salt + password
-        let hash = SHA256.hash(data: Data(combined.utf8))
-        lockPasswordSalt = salt
-        lockPasswordHash = hash.map { String(format: "%02x", $0) }.joined()
-    }
-    static func verifyLockPassword(_ password: String) -> Bool {
-        guard let salt = lockPasswordSalt, let storedHash = lockPasswordHash else { return false }
-        let combined = salt + password
-        let hash = SHA256.hash(data: Data(combined.utf8))
-        let computed = hash.map { String(format: "%02x", $0) }.joined()
-        return computed == storedHash
-    }
-    static func clearLockPassword() {
-        defaults.removeObject(forKey: "lockPasswordHash")
-        defaults.removeObject(forKey: "lockPasswordSalt")
-    }
-}
-
-// MARK: - Slider Menu Item View
-
-class SliderMenuView: NSView {
-    var slider: NSSlider!
-    var label: NSTextField!
-    var onValueChanged: ((Float) -> Void)?
-
-    init(title: String, minValue: Double, maxValue: Double, currentValue: Double, width: CGFloat = 220, onChange: @escaping (Float) -> Void) {
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 30))
-        onValueChanged = onChange
-
-        label = NSTextField(labelWithString: title)
-        label.font = NSFont.menuFont(ofSize: 13)
-        label.frame = NSRect(x: 20, y: 5, width: 60, height: 20)
-        addSubview(label)
-
-        slider = NSSlider(value: currentValue, minValue: minValue, maxValue: maxValue, target: self, action: #selector(sliderChanged(_:)))
-        slider.frame = NSRect(x: 80, y: 5, width: width - 100, height: 20)
-        slider.isContinuous = true
-        addSubview(slider)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    @objc func sliderChanged(_ sender: NSSlider) {
-        onValueChanged?(Float(sender.doubleValue))
-    }
-}
-
-// MARK: - Break Reminder View
-
-class BreakReminderView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        // Dark background
-        context.setFillColor(NSColor.black.withAlphaComponent(0.85).cgColor)
-        context.fill(bounds)
-
-        // Green glow circle
-        let centerX = bounds.midX
-        let centerY = bounds.midY + 40
-        let radius: CGFloat = 120
-        let glowColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.15)
-        for i in stride(from: radius * 2, through: radius, by: -10) {
-            context.setFillColor(glowColor.cgColor)
-            context.fillEllipse(in: CGRect(x: centerX - i, y: centerY - i, width: i * 2, height: i * 2))
-        }
-
-        // Main title
-        let titleFont = NSFont.systemFont(ofSize: 48, weight: .bold)
-        let titleAttrs: [NSAttributedString.Key: Any] = [
-            .font: titleFont,
-            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
-        ]
-        let title = "Take a Break, Ranger"
-        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
-        (title as NSString).draw(at: NSPoint(x: centerX - titleSize.width / 2, y: centerY - titleSize.height / 2), withAttributes: titleAttrs)
-
-        // Subtitle
-        let subFont = NSFont.systemFont(ofSize: 22, weight: .medium)
-        let subAttrs: [NSAttributedString.Key: Any] = [
-            .font: subFont,
-            .foregroundColor: NSColor(calibratedRed: 0.7, green: 0.7, blue: 0.7, alpha: 1)
-        ]
-        let subtitle = "Step away from the screen for a few minutes"
-        let subSize = (subtitle as NSString).size(withAttributes: subAttrs)
-        (subtitle as NSString).draw(at: NSPoint(x: centerX - subSize.width / 2, y: centerY - titleSize.height / 2 - 50), withAttributes: subAttrs)
-
-        // Dismiss hint
-        let hintFont = NSFont.systemFont(ofSize: 14, weight: .regular)
-        let hintAttrs: [NSAttributedString.Key: Any] = [
-            .font: hintFont,
-            .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
-        ]
-        let hint = "Click anywhere or press Escape to dismiss  •  Auto-dismisses in 30 seconds"
-        let hintSize = (hint as NSString).size(withAttributes: hintAttrs)
-        (hint as NSString).draw(at: NSPoint(x: centerX - hintSize.width / 2, y: 60), withAttributes: hintAttrs)
-    }
-}
-
-// MARK: - Lock Overlay View
-
-class LockOverlayView: NSView {
-    let isPasswordScreen: Bool
-
-    init(frame: NSRect, isPasswordScreen: Bool) {
-        self.isPasswordScreen = isPasswordScreen
-        super.init(frame: frame)
-        wantsLayer = true
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        // Semi-transparent overlay (lets Matrix Rain show through)
-        context.setFillColor(NSColor.black.withAlphaComponent(0.65).cgColor)
-        context.fill(bounds)
-
-        // Green glow circle
-        let centerX = bounds.midX
-        let centerY = bounds.midY + 60
-        let radius: CGFloat = 100
-        let glowColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.12)
-        for i in stride(from: radius * 2, through: radius, by: -10) {
-            context.setFillColor(glowColor.cgColor)
-            context.fillEllipse(in: CGRect(x: centerX - i, y: centerY - i, width: i * 2, height: i * 2))
-        }
-
-        // Lock icon
-        let lockFont = NSFont.systemFont(ofSize: 64)
-        let lockAttrs: [NSAttributedString.Key: Any] = [
-            .font: lockFont,
-            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 0.8)
-        ]
-        let lockStr = "🔒"
-        let lockSize = (lockStr as NSString).size(withAttributes: lockAttrs)
-        (lockStr as NSString).draw(at: NSPoint(x: centerX - lockSize.width / 2, y: centerY - lockSize.height / 2 + 10), withAttributes: lockAttrs)
-
-        // Title
-        let titleFont = NSFont.systemFont(ofSize: 42, weight: .bold)
-        let titleAttrs: [NSAttributedString.Key: Any] = [
-            .font: titleFont,
-            .foregroundColor: NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
-        ]
-        let title = "Screen Locked"
-        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
-        (title as NSString).draw(at: NSPoint(x: centerX - titleSize.width / 2, y: centerY - titleSize.height / 2 - 50), withAttributes: titleAttrs)
-
-        if isPasswordScreen {
-            let hintFont = NSFont.systemFont(ofSize: 14, weight: .regular)
-            let hintAttrs: [NSAttributedString.Key: Any] = [
-                .font: hintFont,
-                .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
-            ]
-            let hint = "Enter your password and press Return to unlock"
-            let hintSize = (hint as NSString).size(withAttributes: hintAttrs)
-            (hint as NSString).draw(at: NSPoint(x: centerX - hintSize.width / 2, y: 60), withAttributes: hintAttrs)
-        }
-    }
-}
-
-// MARK: - Lock Screen View
-
-class LockScreenView: NSView, NSTextFieldDelegate {
-    var passwordField: NSSecureTextField?
-    var errorLabel: NSTextField?
-    var onUnlock: (() -> Void)?
-    var matrixRainView: MatrixRainView?
-    let isPasswordScreen: Bool
-
-    init(frame: NSRect, isPasswordScreen: Bool, onUnlock: @escaping () -> Void) {
-        self.isPasswordScreen = isPasswordScreen
-        self.onUnlock = onUnlock
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
-
-        // Matrix Rain background
-        let rain = MatrixRainView(frame: bounds)
-        rain.autoresizingMask = [.width, .height]
-        addSubview(rain)
-        matrixRainView = rain
-
-        // Semi-transparent overlay with lock content
-        let overlay = LockOverlayView(frame: bounds, isPasswordScreen: isPasswordScreen)
-        overlay.autoresizingMask = [.width, .height]
-        addSubview(overlay)
-
-        if isPasswordScreen {
-            setupPasswordField()
-        }
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func setupPasswordField() {
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 28))
-        field.placeholderString = "Enter password..."
-        field.alignment = .center
-        field.font = NSFont.systemFont(ofSize: 16)
-        field.bezelStyle = .roundedBezel
-        field.delegate = self
-        field.target = self
-        field.action = #selector(passwordSubmitted)
-        field.frame.origin = NSPoint(
-            x: bounds.midX - 120,
-            y: bounds.midY - 80
-        )
-        field.autoresizingMask = []
-        addSubview(field)
-        passwordField = field
-
-        let label = NSTextField(labelWithString: "")
-        label.font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        label.textColor = NSColor.systemRed
-        label.alignment = .center
-        label.frame = NSRect(x: bounds.midX - 150, y: bounds.midY - 115, width: 300, height: 20)
-        label.autoresizingMask = []
-        addSubview(label)
-        errorLabel = label
-    }
-
-    @objc func passwordSubmitted() {
-        guard let password = passwordField?.stringValue, !password.isEmpty else { return }
-        if Prefs.verifyLockPassword(password) {
-            onUnlock?()
-        } else {
-            errorLabel?.stringValue = "Incorrect password"
-            shakeField()
-            passwordField?.stringValue = ""
-        }
-    }
-
-    func shakeField() {
-        guard let field = passwordField else { return }
-        let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        animation.timingFunction = CAMediaTimingFunction(name: .linear)
-        animation.duration = 0.4
-        animation.values = [-8, 8, -6, 6, -4, 4, 0]
-        field.layer?.add(animation, forKey: "shake")
-    }
-
-    func startMatrixRain() {
-        matrixRainView?.startPlayback()
-    }
-
-    func stopMatrixRain() {
-        matrixRainView?.stopPlayback()
-    }
-
-    func focusPasswordField() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.passwordField?.becomeFirstResponder()
-        }
-    }
-}
-
-// MARK: - Countdown Overlay View
-
-class CountdownOverlayView: NSView {
-    var timeLabel: NSTextField!
-    var subtitleLabel: NSTextField!
-
-    init(frame: NSRect, fontSize: CGFloat, color: NSColor) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
-        layer?.cornerRadius = 12
-
-        let subtitleSize: CGFloat = fontSize < 22 ? 9 : (fontSize > 30 ? 14 : 11)
-        let subtitleY = frame.height - subtitleSize - 6
-        let timeY: CGFloat = 2
-
-        subtitleLabel = NSTextField(labelWithString: "Break in")
-        subtitleLabel.font = NSFont.systemFont(ofSize: subtitleSize, weight: .medium)
-        subtitleLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
-        subtitleLabel.alignment = .center
-        subtitleLabel.frame = NSRect(x: 0, y: subtitleY, width: frame.width, height: subtitleSize + 4)
-        subtitleLabel.autoresizingMask = [.width]
-        addSubview(subtitleLabel)
-
-        timeLabel = NSTextField(labelWithString: "00:00")
-        timeLabel.font = NSFont(name: "Menlo", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
-        timeLabel.textColor = color
-        timeLabel.alignment = .center
-        timeLabel.frame = NSRect(x: 0, y: timeY, width: frame.width, height: fontSize + 4)
-        timeLabel.autoresizingMask = [.width]
-        addSubview(timeLabel)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func update(remaining: Int, subtitle: String? = nil) {
-        let mins = remaining / 60
-        let secs = remaining % 60
-        timeLabel.stringValue = String(format: "%d:%02d", mins, secs)
-        if let subtitle = subtitle {
-            subtitleLabel.stringValue = subtitle
-        }
-    }
-}
-
-class ClockOverlayView: NSView {
-    var timeLabel: NSTextField!
-    var dateLabel: NSTextField!
-
-    init(frame: NSRect, fontSize: CGFloat, color: NSColor, showDate: Bool) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
-        layer?.cornerRadius = 12
-
-        let dateSize: CGFloat = fontSize < 22 ? 9 : (fontSize > 30 ? 14 : 11)
-
-        timeLabel = NSTextField(labelWithString: "00:00:00")
-        timeLabel.font = NSFont(name: "Menlo", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
-        timeLabel.textColor = color
-        timeLabel.alignment = .center
-        timeLabel.frame = NSRect(x: 0, y: showDate ? 2 : (frame.height - fontSize - 4) / 2, width: frame.width, height: fontSize + 4)
-        timeLabel.autoresizingMask = [.width]
-        addSubview(timeLabel)
-
-        dateLabel = NSTextField(labelWithString: "")
-        dateLabel.font = NSFont.systemFont(ofSize: dateSize, weight: .medium)
-        dateLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
-        dateLabel.alignment = .center
-        dateLabel.frame = NSRect(x: 0, y: frame.height - dateSize - 6, width: frame.width, height: dateSize + 4)
-        dateLabel.autoresizingMask = [.width]
-        dateLabel.isHidden = !showDate
-        addSubview(dateLabel)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func update(time: String, date: String?) {
-        timeLabel.stringValue = time
-        if let date = date {
-            dateLabel.stringValue = date
-            dateLabel.isHidden = false
-        } else {
-            dateLabel.isHidden = true
-        }
-    }
-}
+import UserNotifications
 
 // MARK: - App Delegate
 
@@ -1123,7 +16,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
-    static let appVersion = "4.8.0"
+    static let appVersion = "5.0.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!
@@ -1332,8 +225,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var isPlaying: Bool { currentMode != nil }
 
     func iconImagePath() -> String? {
-        let path = (appFolder as NSString).appendingPathComponent("ranger.png")
-        if FileManager.default.fileExists(atPath: path) { return path }
+        // 1. User drop: ranger.png next to the .app bundle (custom icon feature)
+        let rootPath = (appFolder as NSString).appendingPathComponent("ranger.png")
+        if FileManager.default.fileExists(atPath: rootPath) { return rootPath }
+        // 2. Dev layout: images/ranger.png in the project folder
+        let imagesPath = ((appFolder as NSString).appendingPathComponent("images") as NSString).appendingPathComponent("ranger.png")
+        if FileManager.default.fileExists(atPath: imagesPath) { return imagesPath }
         return nil
     }
 
@@ -1348,6 +245,50 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                 accessibilityDescription: "HollywoodSaver")
             image?.isTemplate = true
             button.image = image
+        }
+    }
+
+    // MARK: - Helpers (DRY)
+
+    /// Resolve a screen preference ("all"/"builtin"/"external") to the matching `NSScreen` list.
+    /// Falls back to all screens if the requested type isn't available.
+    func targetScreens(for preference: String) -> [NSScreen] {
+        let screens = NSScreen.screens
+        let builtIn = screens.first { $0.localizedName.contains("Built") }
+        let externals = screens.filter { !$0.localizedName.contains("Built") }
+        switch preference {
+        case "builtin": return builtIn.map { [$0] } ?? screens
+        case "external": return externals.isEmpty ? screens : externals
+        default: return screens
+        }
+    }
+
+    /// Create a transparent, click-through floating window used by clock/countdown overlays.
+    func createFloatingOverlayWindow(rect: NSRect, content: NSView) -> NSWindow {
+        let window = NSWindow(
+            contentRect: rect,
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .floating
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.ignoresMouseEvents = true
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        window.contentView = content
+        return window
+    }
+
+    /// Rebuild the clock overlay and restart its update timer — only if it's currently active.
+    /// Used by every clock setting mutator so we don't repeat the same block 5 times.
+    func restartClockIfActive() {
+        guard !clockWindows.isEmpty else { return }
+        showClockOverlay()
+        clockTimer?.invalidate()
+        clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.updateClockOverlay()
         }
     }
 
@@ -1395,7 +336,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let screens = NSScreen.screens
         let builtIn = screens.first { $0.localizedName.contains("Built") }
         let externals = screens.filter { !$0.localizedName.contains("Built") }
-        let hasExternal = !externals.isEmpty
 
         if media.isEmpty {
             let item = NSMenuItem(title: "No media found", action: nil, keyEquivalent: "")
@@ -1407,39 +347,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else if media.count == 1 {
             selectedMedia = media[0]
             let name = displayName(for: media[0])
-
-            if hasExternal {
-                let header = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-                header.isEnabled = false
-                menu.addItem(header)
-                menu.addItem(NSMenuItem.separator())
-                addScreenItems(to: menu, file: media[0], builtIn: builtIn, externals: externals)
-            } else {
-                menu.addItem(NSMenuItem(title: "Play \(name)", action: #selector(playAllScreensScreensaver), keyEquivalent: ""))
-            }
+            let header = NSMenuItem(title: name, action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            menu.addItem(NSMenuItem.separator())
+            addScreenItems(to: menu, file: media[0], builtIn: builtIn, externals: externals)
         } else {
             // Shuffle option
-            if media.count > 1 {
-                let shuffleItem = NSMenuItem(title: "Shuffle Random", action: #selector(playShuffle), keyEquivalent: "")
-                menu.addItem(shuffleItem)
-                menu.addItem(NSMenuItem.separator())
-            }
+            let shuffleItem = NSMenuItem(title: "Shuffle Random", action: #selector(playShuffle), keyEquivalent: "")
+            menu.addItem(shuffleItem)
+            menu.addItem(NSMenuItem.separator())
 
             for file in media {
                 let name = displayName(for: file)
+                let submenu = NSMenu()
+                addScreenItems(to: submenu, file: file, builtIn: builtIn, externals: externals)
 
-                if hasExternal {
-                    let submenu = NSMenu()
-                    addScreenItems(to: submenu, file: file, builtIn: builtIn, externals: externals)
-
-                    let menuItem = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-                    menuItem.submenu = submenu
-                    menu.addItem(menuItem)
-                } else {
-                    let item = NSMenuItem(title: name, action: #selector(playMediaScreensaver(_:)), keyEquivalent: "")
-                    item.representedObject = file as AnyObject
-                    menu.addItem(item)
-                }
+                let menuItem = NSMenuItem(title: name, action: nil, keyEquivalent: "")
+                menuItem.submenu = submenu
+                menu.addItem(menuItem)
             }
         }
 
@@ -1526,54 +452,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         settingsItem.submenu = settingsSubmenu
         matrixSubmenu.addItem(settingsItem)
-        matrixSubmenu.addItem(NSMenuItem.separator())
 
-        // Screen selection for Matrix Rain
-        if hasExternal {
-            addScreenItems(to: matrixSubmenu, file: AppDelegate.matrixRainSentinel, builtIn: builtIn, externals: externals)
-        } else {
-            let playItem = NSMenuItem(title: "Play", action: #selector(playMatrixRainAllScreens), keyEquivalent: "")
-            matrixSubmenu.addItem(playItem)
-        }
-
-        matrixItem.submenu = matrixSubmenu
-        menu.addItem(matrixItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Sound toggle
-        let soundItem = NSMenuItem(title: "Sound", action: #selector(toggleSound), keyEquivalent: "")
-        soundItem.state = Prefs.soundEnabled ? .on : .off
-        menu.addItem(soundItem)
-
-        // Volume slider
-        let volumeView = SliderMenuView(title: "Volume", minValue: 0, maxValue: 1, currentValue: Double(Prefs.volume)) { newVal in
-            Prefs.volume = newVal
-            // Update any currently playing video players
-            for cv in self.contentViews {
-                if let vp = cv as? VideoPlayerView {
-                    vp.queuePlayer.volume = newVal
-                }
-            }
-        }
-        let volumeMenuItem = NSMenuItem()
-        volumeMenuItem.view = volumeView
-        menu.addItem(volumeMenuItem)
-
-        // Opacity slider (ambient mode)
-        let opacityView = SliderMenuView(title: "Opacity", minValue: 0.1, maxValue: 1, currentValue: Double(Prefs.ambientOpacity)) { newVal in
-            Prefs.ambientOpacity = newVal
-            if self.currentMode == .ambient {
-                for w in self.screensaverWindows {
-                    w.alphaValue = CGFloat(newVal)
-                }
-            }
-        }
-        let opacityMenuItem = NSMenuItem()
-        opacityMenuItem.view = opacityView
-        menu.addItem(opacityMenuItem)
-
-        // Rain Effects submenu
+        // Rain Effects submenu (sibling of Settings, inside Matrix Rain)
         let rainItem = NSMenuItem(title: "Rain Effects", action: nil, keyEquivalent: "")
         let rainSubmenu = NSMenu(title: "Rain Effects")
 
@@ -1630,145 +510,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         rainItem.submenu = rainSubmenu
-        menu.addItem(rainItem)
+        matrixSubmenu.addItem(rainItem)
 
-        // Clock overlay submenu
-        let clockItem = NSMenuItem(title: "Clock", action: nil, keyEquivalent: "")
-        let clockSubmenu = NSMenu(title: "Clock")
+        matrixSubmenu.addItem(NSMenuItem.separator())
 
-        let clockToggle = NSMenuItem(title: "Show Clock", action: #selector(toggleClockOverlay), keyEquivalent: "")
-        clockToggle.state = !clockWindows.isEmpty ? .on : .off
-        clockSubmenu.addItem(clockToggle)
+        // Screen selection for Matrix Rain
+        addScreenItems(to: matrixSubmenu, file: AppDelegate.matrixRainSentinel, builtIn: builtIn, externals: externals)
 
-        let clockDateToggle = NSMenuItem(title: "Show Date", action: #selector(toggleClockDate), keyEquivalent: "")
-        clockDateToggle.state = Prefs.clockShowDate ? .on : .off
-        clockSubmenu.addItem(clockDateToggle)
-
-        clockSubmenu.addItem(NSMenuItem.separator())
-
-        // Clock Display
-        let clockDisplayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
-        let clockDisplaySubmenu = NSMenu(title: "Display")
-        for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
-            let item = NSMenuItem(title: label, action: #selector(setClockScreen(_:)), keyEquivalent: "")
-            item.representedObject = value as AnyObject
-            item.state = Prefs.clockScreen == value ? .on : .off
-            clockDisplaySubmenu.addItem(item)
-        }
-        clockDisplayItem.submenu = clockDisplaySubmenu
-        clockSubmenu.addItem(clockDisplayItem)
-
-        // Clock Position
-        let clockPositionItem = NSMenuItem(title: "Position", action: nil, keyEquivalent: "")
-        let clockPositionSubmenu = NSMenu(title: "Position")
-        for (label, value) in [("Top Right", "topRight"), ("Top Left", "topLeft"), ("Bottom Right", "bottomRight"), ("Bottom Left", "bottomLeft")] {
-            let item = NSMenuItem(title: label, action: #selector(setClockPosition(_:)), keyEquivalent: "")
-            item.representedObject = value as AnyObject
-            item.state = Prefs.clockPosition == value ? .on : .off
-            clockPositionSubmenu.addItem(item)
-        }
-        clockPositionItem.submenu = clockPositionSubmenu
-        clockSubmenu.addItem(clockPositionItem)
-
-        // Clock Color
-        let clockColorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
-        let clockColorSubmenu = NSMenu(title: "Color")
-        for color in ["Green", "Blue", "Red", "Orange", "White", "Purple"] {
-            let item = NSMenuItem(title: color, action: #selector(setClockColor(_:)), keyEquivalent: "")
-            item.representedObject = color as AnyObject
-            item.state = Prefs.clockColor == color ? .on : .off
-            clockColorSubmenu.addItem(item)
-        }
-        clockColorItem.submenu = clockColorSubmenu
-        clockSubmenu.addItem(clockColorItem)
-
-        // Clock Size
-        let clockSizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
-        let clockSizeSubmenu = NSMenu(title: "Size")
-        for size in ["Compact", "Normal", "Large"] {
-            let item = NSMenuItem(title: size, action: #selector(setClockSize(_:)), keyEquivalent: "")
-            item.representedObject = size as AnyObject
-            item.state = Prefs.clockSize == size ? .on : .off
-            clockSizeSubmenu.addItem(item)
-        }
-        clockSizeItem.submenu = clockSizeSubmenu
-        clockSubmenu.addItem(clockSizeItem)
-
-        clockItem.submenu = clockSubmenu
-        menu.addItem(clockItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Loop toggle
-        let loopItem = NSMenuItem(title: "Loop", action: #selector(toggleLoop), keyEquivalent: "")
-        loopItem.state = Prefs.loopEnabled ? .on : .off
-        menu.addItem(loopItem)
-
-        // Auto Play toggle
-        let autoPlayItem = NSMenuItem(title: "Auto Play on Launch", action: #selector(toggleAutoPlay), keyEquivalent: "")
-        autoPlayItem.state = Prefs.autoPlayEnabled ? .on : .off
-        menu.addItem(autoPlayItem)
-
-        // Launch at login
-        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        loginItem.state = Prefs.launchAtLogin ? .on : .off
-        menu.addItem(loginItem)
-
-        // Show in Dock
-        let dockItem = NSMenuItem(title: "Show in Dock", action: #selector(toggleDockIcon), keyEquivalent: "")
-        dockItem.state = Prefs.showDockIcon ? .on : .off
-        menu.addItem(dockItem)
-
-        // Desktop Shortcut
-        let desktopItem = NSMenuItem(title: "Desktop Shortcut", action: #selector(toggleDesktopShortcut), keyEquivalent: "")
-        desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
-        menu.addItem(desktopItem)
-
-        // Sleep
-        menu.addItem(NSMenuItem.separator())
-        let sleepItem = NSMenuItem(title: "Sleep", action: nil, keyEquivalent: "")
-        let sleepSubmenu = NSMenu(title: "Sleep")
-
-        if let endDate = sleepEndDate {
-            let remaining = max(0, Int(endDate.timeIntervalSinceNow))
-            let mins = remaining / 60
-            let secs = remaining % 60
-            let countdownItem = NSMenuItem(title: String(format: "  Sleep in %d:%02d", mins, secs), action: nil, keyEquivalent: "")
-            countdownItem.isEnabled = false
-            sleepSubmenu.addItem(countdownItem)
-            let cancelItem = NSMenuItem(title: "Cancel Sleep Timer", action: #selector(cancelSleepTimer), keyEquivalent: "")
-            sleepSubmenu.addItem(cancelItem)
-        } else {
-            let sleepNowItem = NSMenuItem(title: "Sleep Now", action: #selector(sleepNow), keyEquivalent: "")
-            sleepSubmenu.addItem(sleepNowItem)
-
-            sleepSubmenu.addItem(NSMenuItem.separator())
-
-            for minutes in [90, 60, 45, 30, 15] {
-                let item = NSMenuItem(title: "Sleep in \(minutes) min", action: #selector(startSleepTimer(_:)), keyEquivalent: "")
-                item.representedObject = minutes as AnyObject
-                sleepSubmenu.addItem(item)
-            }
-            let customSleepItem = NSMenuItem(title: "Custom...", action: #selector(startCustomSleepTimer), keyEquivalent: "")
-            sleepSubmenu.addItem(customSleepItem)
-        }
-
-        sleepSubmenu.addItem(NSMenuItem.separator())
-        let sleepAfterItem = NSMenuItem(title: "Sleep After Playback", action: #selector(toggleSleepAfterPlayback), keyEquivalent: "")
-        sleepAfterItem.state = sleepAfterPlayback ? .on : .off
-        sleepAfterItem.isEnabled = isPlaying || sleepAfterPlayback
-        sleepSubmenu.addItem(sleepAfterItem)
-
-        let sleepCountdownItem = NSMenuItem(title: "Countdown Overlay", action: #selector(toggleSleepCountdown), keyEquivalent: "")
-        sleepCountdownItem.state = Prefs.sleepCountdownEnabled ? .on : .off
-        sleepSubmenu.addItem(sleepCountdownItem)
-
-        let resumeAfterSleepItem = NSMenuItem(title: "Resume Playback After Wake", action: #selector(toggleResumeAfterSleep), keyEquivalent: "")
-        resumeAfterSleepItem.state = Prefs.resumeAfterSleep ? .on : .off
-        sleepSubmenu.addItem(resumeAfterSleepItem)
-
-        sleepItem.submenu = sleepSubmenu
-        menu.addItem(sleepItem)
+        matrixItem.submenu = matrixSubmenu
+        menu.addItem(matrixItem)
 
         // Break Reminder
         menu.addItem(NSMenuItem.separator())
@@ -1946,6 +696,73 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         breakItem.submenu = breakSubmenu
         menu.addItem(breakItem)
 
+        // Clock overlay submenu (top level, between Break Reminder and Lock Screen)
+        let clockItem = NSMenuItem(title: "Clock", action: nil, keyEquivalent: "")
+        let clockSubmenu = NSMenu(title: "Clock")
+
+        let clockToggle = NSMenuItem(title: "Show Clock", action: #selector(toggleClockOverlay), keyEquivalent: "")
+        clockToggle.state = !clockWindows.isEmpty ? .on : .off
+        clockSubmenu.addItem(clockToggle)
+
+        let clockDateToggle = NSMenuItem(title: "Show Date", action: #selector(toggleClockDate), keyEquivalent: "")
+        clockDateToggle.state = Prefs.clockShowDate ? .on : .off
+        clockSubmenu.addItem(clockDateToggle)
+
+        clockSubmenu.addItem(NSMenuItem.separator())
+
+        // Clock Display
+        let clockDisplayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
+        let clockDisplaySubmenu = NSMenu(title: "Display")
+        for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
+            let item = NSMenuItem(title: label, action: #selector(setClockScreen(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.clockScreen == value ? .on : .off
+            clockDisplaySubmenu.addItem(item)
+        }
+        clockDisplayItem.submenu = clockDisplaySubmenu
+        clockSubmenu.addItem(clockDisplayItem)
+
+        // Clock Position
+        let clockPositionItem = NSMenuItem(title: "Position", action: nil, keyEquivalent: "")
+        let clockPositionSubmenu = NSMenu(title: "Position")
+        for (label, value) in [("Top Right", "topRight"), ("Top Left", "topLeft"), ("Bottom Right", "bottomRight"), ("Bottom Left", "bottomLeft")] {
+            let item = NSMenuItem(title: label, action: #selector(setClockPosition(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.clockPosition == value ? .on : .off
+            clockPositionSubmenu.addItem(item)
+        }
+        clockPositionItem.submenu = clockPositionSubmenu
+        clockSubmenu.addItem(clockPositionItem)
+
+        // Clock Color
+        let clockColorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        let clockColorSubmenu = NSMenu(title: "Color")
+        for color in ["Green", "Blue", "Red", "Orange", "White", "Purple"] {
+            let item = NSMenuItem(title: color, action: #selector(setClockColor(_:)), keyEquivalent: "")
+            item.representedObject = color as AnyObject
+            item.state = Prefs.clockColor == color ? .on : .off
+            clockColorSubmenu.addItem(item)
+        }
+        clockColorItem.submenu = clockColorSubmenu
+        clockSubmenu.addItem(clockColorItem)
+
+        // Clock Size
+        let clockSizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        let clockSizeSubmenu = NSMenu(title: "Size")
+        for size in ["Compact", "Normal", "Large"] {
+            let item = NSMenuItem(title: size, action: #selector(setClockSize(_:)), keyEquivalent: "")
+            item.representedObject = size as AnyObject
+            item.state = Prefs.clockSize == size ? .on : .off
+            clockSizeSubmenu.addItem(item)
+        }
+        clockSizeItem.submenu = clockSizeSubmenu
+        clockSubmenu.addItem(clockSizeItem)
+
+        clockItem.submenu = clockSubmenu
+        menu.addItem(clockItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // Lock Screen
         let lockItem = NSMenuItem(title: "Lock Screen", action: nil, keyEquivalent: "")
         let lockSubmenu = NSMenu(title: "Lock Screen")
@@ -1968,6 +785,112 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         lockItem.submenu = lockSubmenu
         menu.addItem(lockItem)
+
+        // Sleep (between Lock Screen and Contribute)
+        menu.addItem(NSMenuItem.separator())
+        let sleepItem = NSMenuItem(title: "Sleep", action: nil, keyEquivalent: "")
+        let sleepSubmenu = NSMenu(title: "Sleep")
+
+        if let endDate = sleepEndDate {
+            let remaining = max(0, Int(endDate.timeIntervalSinceNow))
+            let mins = remaining / 60
+            let secs = remaining % 60
+            let countdownItem = NSMenuItem(title: String(format: "  Sleep in %d:%02d", mins, secs), action: nil, keyEquivalent: "")
+            countdownItem.isEnabled = false
+            sleepSubmenu.addItem(countdownItem)
+            let cancelItem = NSMenuItem(title: "Cancel Sleep Timer", action: #selector(cancelSleepTimer), keyEquivalent: "")
+            sleepSubmenu.addItem(cancelItem)
+        } else {
+            let sleepNowItem = NSMenuItem(title: "Sleep Now", action: #selector(sleepNow), keyEquivalent: "")
+            sleepSubmenu.addItem(sleepNowItem)
+
+            sleepSubmenu.addItem(NSMenuItem.separator())
+
+            for minutes in [90, 60, 45, 30, 15] {
+                let item = NSMenuItem(title: "Sleep in \(minutes) min", action: #selector(startSleepTimer(_:)), keyEquivalent: "")
+                item.representedObject = minutes as AnyObject
+                sleepSubmenu.addItem(item)
+            }
+            let customSleepItem = NSMenuItem(title: "Custom...", action: #selector(startCustomSleepTimer), keyEquivalent: "")
+            sleepSubmenu.addItem(customSleepItem)
+        }
+
+        sleepSubmenu.addItem(NSMenuItem.separator())
+        let sleepAfterItem = NSMenuItem(title: "Sleep After Playback", action: #selector(toggleSleepAfterPlayback), keyEquivalent: "")
+        sleepAfterItem.state = sleepAfterPlayback ? .on : .off
+        sleepAfterItem.isEnabled = isPlaying || sleepAfterPlayback
+        sleepSubmenu.addItem(sleepAfterItem)
+
+        let sleepCountdownItem = NSMenuItem(title: "Countdown Overlay", action: #selector(toggleSleepCountdown), keyEquivalent: "")
+        sleepCountdownItem.state = Prefs.sleepCountdownEnabled ? .on : .off
+        sleepSubmenu.addItem(sleepCountdownItem)
+
+        let resumeAfterSleepItem = NSMenuItem(title: "Resume Playback After Wake", action: #selector(toggleResumeAfterSleep), keyEquivalent: "")
+        resumeAfterSleepItem.state = Prefs.resumeAfterSleep ? .on : .off
+        sleepSubmenu.addItem(resumeAfterSleepItem)
+
+        sleepItem.submenu = sleepSubmenu
+        menu.addItem(sleepItem)
+
+        // Playback / App config toggles (moved to bottom for cleaner feature-first layout)
+        menu.addItem(NSMenuItem.separator())
+
+        // Sound toggle
+        let soundItem = NSMenuItem(title: "Sound", action: #selector(toggleSound), keyEquivalent: "")
+        soundItem.state = Prefs.soundEnabled ? .on : .off
+        menu.addItem(soundItem)
+
+        // Volume slider
+        let volumeView = SliderMenuView(title: "Volume", minValue: 0, maxValue: 1, currentValue: Double(Prefs.volume)) { newVal in
+            Prefs.volume = newVal
+            // Update any currently playing video players
+            for cv in self.contentViews {
+                if let vp = cv as? VideoPlayerView {
+                    vp.queuePlayer.volume = newVal
+                }
+            }
+        }
+        let volumeMenuItem = NSMenuItem()
+        volumeMenuItem.view = volumeView
+        menu.addItem(volumeMenuItem)
+
+        // Opacity slider (ambient mode)
+        let opacityView = SliderMenuView(title: "Opacity", minValue: 0.1, maxValue: 1, currentValue: Double(Prefs.ambientOpacity)) { newVal in
+            Prefs.ambientOpacity = newVal
+            if self.currentMode == .ambient {
+                for w in self.screensaverWindows {
+                    w.alphaValue = CGFloat(newVal)
+                }
+            }
+        }
+        let opacityMenuItem = NSMenuItem()
+        opacityMenuItem.view = opacityView
+        menu.addItem(opacityMenuItem)
+
+        // Loop toggle
+        let loopItem = NSMenuItem(title: "Loop", action: #selector(toggleLoop), keyEquivalent: "")
+        loopItem.state = Prefs.loopEnabled ? .on : .off
+        menu.addItem(loopItem)
+
+        // Auto Play toggle
+        let autoPlayItem = NSMenuItem(title: "Auto Play on Launch", action: #selector(toggleAutoPlay), keyEquivalent: "")
+        autoPlayItem.state = Prefs.autoPlayEnabled ? .on : .off
+        menu.addItem(autoPlayItem)
+
+        // Launch at login
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.state = Prefs.launchAtLogin ? .on : .off
+        menu.addItem(loginItem)
+
+        // Show in Dock
+        let dockItem = NSMenuItem(title: "Show in Dock", action: #selector(toggleDockIcon), keyEquivalent: "")
+        dockItem.state = Prefs.showDockIcon ? .on : .off
+        menu.addItem(dockItem)
+
+        // Desktop Shortcut
+        let desktopItem = NSMenuItem(title: "Desktop Shortcut", action: #selector(toggleDesktopShortcut), keyEquivalent: "")
+        desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
+        menu.addItem(desktopItem)
 
         // Contribute
         menu.addItem(NSMenuItem.separator())
@@ -2149,22 +1072,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hideSleepCountdownOverlay()
         guard Prefs.sleepCountdownEnabled else { return }
 
-        let screens = NSScreen.screens
-        let builtIn = screens.first { $0.localizedName.contains("Built") }
-        let externals = screens.filter { !$0.localizedName.contains("Built") }
-
-        let targetScreens: [NSScreen]
-        switch Prefs.countdownScreen {
-        case "builtin": targetScreens = builtIn.map { [$0] } ?? screens
-        case "external": targetScreens = externals.isEmpty ? screens : externals
-        default: targetScreens = screens
-        }
-
         let sizeConfig = countdownSizeConfig()
         let size = CGSize(width: sizeConfig.width, height: sizeConfig.height)
         let padding: CGFloat = 20
+        let sleepColor = NSColor(calibratedRed: 0.4, green: 0.6, blue: 1.0, alpha: 1.0)
 
-        for screen in targetScreens {
+        for screen in targetScreens(for: Prefs.countdownScreen) {
             // Sleep countdown goes in the opposite corner from break countdown
             let origin: NSPoint
             switch Prefs.countdownPosition {
@@ -2182,22 +1095,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                  y: screen.frame.minY + padding)
             }
 
-            let window = NSWindow(
-                contentRect: NSRect(origin: origin, size: size),
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            window.level = .floating
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = true
-            window.ignoresMouseEvents = true
-            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
-
-            let sleepColor = NSColor(calibratedRed: 0.4, green: 0.6, blue: 1.0, alpha: 1.0)
             let overlay = CountdownOverlayView(frame: NSRect(origin: .zero, size: size), fontSize: sizeConfig.fontSize, color: sleepColor)
-            window.contentView = overlay
+            let window = createFloatingOverlayWindow(rect: NSRect(origin: origin, size: size), content: overlay)
             window.orderFrontRegardless()
             sleepCountdownWindows.append(window)
         }
@@ -2721,24 +1620,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showCountdownOverlay() {
         hideCountdownOverlay()
 
-        let screens = NSScreen.screens
-        let builtIn = screens.first { $0.localizedName.contains("Built") }
-        let externals = screens.filter { !$0.localizedName.contains("Built") }
-
-        let targetScreens: [NSScreen]
-        switch Prefs.countdownScreen {
-        case "builtin": targetScreens = builtIn.map { [$0] } ?? screens
-        case "external": targetScreens = externals.isEmpty ? screens : externals
-        default: targetScreens = screens
-        }
-
         let sizeConfig = countdownSizeConfig()
         let size = CGSize(width: sizeConfig.width, height: sizeConfig.height)
         let color = countdownNSColor()
         let padding: CGFloat = 20
         let menuBarHeight: CGFloat = 25
 
-        for screen in targetScreens {
+        for screen in targetScreens(for: Prefs.countdownScreen) {
             let origin: NSPoint
             switch Prefs.countdownPosition {
             case "topLeft":
@@ -2755,21 +1643,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                  y: screen.frame.maxY - size.height - padding - menuBarHeight)
             }
 
-            let window = NSWindow(
-                contentRect: NSRect(origin: origin, size: size),
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            window.level = .floating
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = true
-            window.ignoresMouseEvents = true
-            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
-
             let overlay = CountdownOverlayView(frame: NSRect(origin: .zero, size: size), fontSize: sizeConfig.fontSize, color: color)
-            window.contentView = overlay
+            let window = createFloatingOverlayWindow(rect: NSRect(origin: origin, size: size), content: overlay)
             window.orderFrontRegardless()
             countdownWindows.append(window)
         }
@@ -3134,13 +2009,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Screen items submenu
 
     func addScreenItems(to menu: NSMenu, file: String, builtIn: NSScreen?, externals: [NSScreen]) {
+        // Skip "All Screens" row when there are no externals — it would just duplicate the Built-in row.
+        let showAllScreens = !externals.isEmpty
+
         let screensaverHeader = NSMenuItem(title: "Screensaver", action: nil, keyEquivalent: "")
         screensaverHeader.isEnabled = false
         menu.addItem(screensaverHeader)
 
-        let allItem = NSMenuItem(title: "  All Screens", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
-        allItem.representedObject = (file, NSScreen.screens) as AnyObject
-        menu.addItem(allItem)
+        if showAllScreens {
+            let allItem = NSMenuItem(title: "  All Screens", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
+            allItem.representedObject = (file, NSScreen.screens) as AnyObject
+            menu.addItem(allItem)
+        }
 
         if let bi = builtIn {
             let item = NSMenuItem(title: "  \(bi.localizedName)", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
@@ -3158,9 +2038,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ambientHeader.isEnabled = false
         menu.addItem(ambientHeader)
 
-        let allAmbient = NSMenuItem(title: "  All Screens", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
-        allAmbient.representedObject = (file, NSScreen.screens) as AnyObject
-        menu.addItem(allAmbient)
+        if showAllScreens {
+            let allAmbient = NSMenuItem(title: "  All Screens", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
+            allAmbient.representedObject = (file, NSScreen.screens) as AnyObject
+            menu.addItem(allAmbient)
+        }
 
         if let bi = builtIn {
             let item = NSMenuItem(title: "  \(bi.localizedName)", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
@@ -3345,17 +2227,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func startRainOverlay() {
         stopRainOverlay()
-        let allScreens = NSScreen.screens
-        let builtIn = allScreens.first { $0.localizedName.contains("Built") }
-        let externals = allScreens.filter { !$0.localizedName.contains("Built") }
-        let targetScreens: [NSScreen]
-        switch Prefs.rainScreen {
-        case "builtin": targetScreens = builtIn.map { [$0] } ?? allScreens
-        case "external": targetScreens = externals.isEmpty ? allScreens : externals
-        default: targetScreens = allScreens
-        }
 
-        for screen in targetScreens {
+        for screen in targetScreens(for: Prefs.rainScreen) {
             let window = NSWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
@@ -3402,17 +2275,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func startRainBehind() {
         stopRainBehind()
-        let allScreens = NSScreen.screens
-        let builtIn = allScreens.first { $0.localizedName.contains("Built") }
-        let externals = allScreens.filter { !$0.localizedName.contains("Built") }
-        let targetScreens: [NSScreen]
-        switch Prefs.rainScreen {
-        case "builtin": targetScreens = builtIn.map { [$0] } ?? allScreens
-        case "external": targetScreens = externals.isEmpty ? allScreens : externals
-        default: targetScreens = allScreens
-        }
 
-        for screen in targetScreens {
+        for screen in targetScreens(for: Prefs.rainScreen) {
             let window = NSWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
@@ -3491,23 +2355,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showClockOverlay() {
         hideClockOverlay()
 
-        let allScreens = NSScreen.screens
-        let builtIn = allScreens.first { $0.localizedName.contains("Built") }
-        let externals = allScreens.filter { !$0.localizedName.contains("Built") }
-        let targetScreens: [NSScreen]
-        switch Prefs.clockScreen {
-        case "builtin": targetScreens = builtIn.map { [$0] } ?? allScreens
-        case "external": targetScreens = externals.isEmpty ? allScreens : externals
-        default: targetScreens = allScreens
-        }
-
         let sizeConfig = clockSizeConfig()
         let size = CGSize(width: sizeConfig.width, height: sizeConfig.height)
         let color = clockNSColor()
         let padding: CGFloat = 20
         let menuBarHeight: CGFloat = 25
 
-        for screen in targetScreens {
+        for screen in targetScreens(for: Prefs.clockScreen) {
             let origin: NSPoint
             switch Prefs.clockPosition {
             case "topLeft":
@@ -3524,21 +2378,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                  y: screen.frame.maxY - size.height - padding - menuBarHeight)
             }
 
-            let window = NSWindow(
-                contentRect: NSRect(origin: origin, size: size),
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            window.level = .floating
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = true
-            window.ignoresMouseEvents = true
-            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
-
             let overlay = ClockOverlayView(frame: NSRect(origin: .zero, size: size), fontSize: sizeConfig.fontSize, color: color, showDate: Prefs.clockShowDate)
-            window.contentView = overlay
+            let window = createFloatingOverlayWindow(rect: NSRect(origin: origin, size: size), content: overlay)
             window.orderFrontRegardless()
             clockWindows.append(window)
         }
@@ -3595,61 +2436,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleClockDate() {
         Prefs.clockShowDate = !Prefs.clockShowDate
-        if !clockWindows.isEmpty {
-            showClockOverlay()
-            clockTimer?.invalidate()
-            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                self?.updateClockOverlay()
-            }
-        }
+        restartClockIfActive()
     }
 
     @objc func setClockScreen(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.clockScreen = value
-        if !clockWindows.isEmpty {
-            showClockOverlay()
-            clockTimer?.invalidate()
-            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                self?.updateClockOverlay()
-            }
-        }
+        restartClockIfActive()
     }
 
     @objc func setClockPosition(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.clockPosition = value
-        if !clockWindows.isEmpty {
-            showClockOverlay()
-            clockTimer?.invalidate()
-            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                self?.updateClockOverlay()
-            }
-        }
+        restartClockIfActive()
     }
 
     @objc func setClockColor(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.clockColor = value
-        if !clockWindows.isEmpty {
-            showClockOverlay()
-            clockTimer?.invalidate()
-            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                self?.updateClockOverlay()
-            }
-        }
+        restartClockIfActive()
     }
 
     @objc func setClockSize(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.clockSize = value
-        if !clockWindows.isEmpty {
-            showClockOverlay()
-            clockTimer?.invalidate()
-            clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                self?.updateClockOverlay()
-            }
-        }
+        restartClockIfActive()
     }
 }
 
@@ -3665,10 +2476,3 @@ extension AppDelegate: NSMenuDelegate {
         }
     }
 }
-
-// MARK: - Main
-
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.run()

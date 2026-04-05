@@ -1,15 +1,15 @@
 # About HollywoodSaver
 
-**Version:** 4.8.0 (Final Free Version)
+**Version:** 5.0.0 (Architecture Refactor — same feature set, modular codebase)
 **Platform:** macOS 15+ (Apple Silicon — M1/M2/M3/M4)
 **License:** MIT
-**Source:** Single Swift file (~3000 lines), compiled with `swiftc` — no Xcode project
+**Source:** 14 Swift files in `src/` (~3,600 lines total), compiled with `swiftc` — no Xcode project
 
 ---
 
 ## What is HollywoodSaver?
 
-HollywoodSaver is a native macOS menu bar app that turns your Mac into a video screensaver and **live wallpaper engine**. Play looping videos, GIFs, and built-in effects fullscreen — or run them behind your windows as a living desktop. Built with Swift in a single file, no Xcode project needed.
+HollywoodSaver is a native macOS menu bar app that turns your Mac into a video screensaver and **live wallpaper engine**. Play looping videos, GIFs, and built-in effects fullscreen — or run them behind your windows as a living desktop. Built with pure Swift across 14 modular files, no Xcode project needed.
 
 ---
 
@@ -51,7 +51,8 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 
 | Version | Highlights |
 |---------|-----------|
-| **v4.8.0** | **FINAL FREE VERSION** — Floating Clock Overlay (6 colors, 3 sizes, 4 corners, date toggle, screen selection) |
+| **v5.0.0** | **Architecture Refactor** — 3,599-line monolith split into 14 files in `src/`, new `docs/`/`images/`/`videos/`/`gifs/` folders, DRY refactoring (−75 lines), menu bar icon fix. Zero feature changes. |
+| **v4.8.0** | Floating Clock Overlay (6 colors, 3 sizes, 4 corners, date toggle, screen selection) — last release before modular refactor |
 | **v4.7.0** | Rain Effects screen selection (All Screens, Built-in, External) |
 | **v4.6.0** | Version bump, updated ABOUT with full feature list |
 | **v4.5.0** | Rain Effects — Rain Behind Windows + Rain Over Windows, independent toggles, separate opacity, Stop All Rain, auto-restore |

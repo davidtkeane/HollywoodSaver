@@ -19,9 +19,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Extract version from Swift source
-VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/HollywoodSaver.swift" | grep -o '"[^"]*"' | tr -d '"')
+VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/src/AppDelegate.swift" | grep -o '"[^"]*"' | tr -d '"')
 if [ -z "$VERSION" ]; then
-    echo -e "${RED}Error: Could not extract version from HollywoodSaver.swift${NC}"
+    echo -e "${RED}Error: Could not extract version from src/AppDelegate.swift${NC}"
     exit 1
 fi
 

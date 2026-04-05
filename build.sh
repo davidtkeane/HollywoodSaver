@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$SCRIPT_DIR/HollywoodSaver.app"
 
 # Read version from Swift source (single source of truth)
-VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/HollywoodSaver.swift" | grep -o '"[^"]*"' | tr -d '"')
+VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/src/AppDelegate.swift" | grep -o '"[^"]*"' | tr -d '"')
 if [ -z "$VERSION" ]; then
     VERSION="2.2.0"
     echo -e "${YELLOW}Warning: Could not read version from Swift source, using default ${VERSION}${NC}"
@@ -60,8 +60,8 @@ fi
 echo -e "  ${GREEN}✅${NC} iconutil available"
 
 # Check for ranger.png
-if [ ! -f "$SCRIPT_DIR/ranger.png" ]; then
-    echo -e "  ${YELLOW}⚠️${NC}  ranger.png not found (app will use default icon)"
+if [ ! -f "$SCRIPT_DIR/images/ranger.png" ]; then
+    echo -e "  ${YELLOW}⚠️${NC}  images/ranger.png not found (app will use default icon)"
 fi
 
 echo ""
@@ -116,7 +116,7 @@ printf 'APPL????' > "$APP_DIR/Contents/PkgInfo"
 echo -e "  ${GREEN}✅${NC} PkgInfo created"
 
 # Create app icon from ranger.png if available
-if [ -f "$SCRIPT_DIR/ranger.png" ]; then
+if [ -f "$SCRIPT_DIR/images/ranger.png" ]; then
     echo ""
     echo -e "${BLUE}Creating app icon...${NC}"
 
@@ -124,16 +124,16 @@ if [ -f "$SCRIPT_DIR/ranger.png" ]; then
     mkdir -p "$ICONSET"
 
     # Generate all required icon sizes
-    sips -z 16 16     "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_16x16.png" > /dev/null 2>&1
-    sips -z 32 32     "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_16x16@2x.png" > /dev/null 2>&1
-    sips -z 32 32     "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_32x32.png" > /dev/null 2>&1
-    sips -z 64 64     "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_32x32@2x.png" > /dev/null 2>&1
-    sips -z 128 128   "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_128x128.png" > /dev/null 2>&1
-    sips -z 256 256   "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_128x128@2x.png" > /dev/null 2>&1
-    sips -z 256 256   "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_256x256.png" > /dev/null 2>&1
-    sips -z 512 512   "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_256x256@2x.png" > /dev/null 2>&1
-    sips -z 512 512   "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_512x512.png" > /dev/null 2>&1
-    sips -z 1024 1024 "$SCRIPT_DIR/ranger.png" --out "$ICONSET/icon_512x512@2x.png" > /dev/null 2>&1
+    sips -z 16 16     "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_16x16.png" > /dev/null 2>&1
+    sips -z 32 32     "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_16x16@2x.png" > /dev/null 2>&1
+    sips -z 32 32     "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_32x32.png" > /dev/null 2>&1
+    sips -z 64 64     "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_32x32@2x.png" > /dev/null 2>&1
+    sips -z 128 128   "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_128x128.png" > /dev/null 2>&1
+    sips -z 256 256   "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_128x128@2x.png" > /dev/null 2>&1
+    sips -z 256 256   "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_256x256.png" > /dev/null 2>&1
+    sips -z 512 512   "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_256x256@2x.png" > /dev/null 2>&1
+    sips -z 512 512   "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_512x512.png" > /dev/null 2>&1
+    sips -z 1024 1024 "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_512x512@2x.png" > /dev/null 2>&1
 
     # Convert iconset to .icns
     if iconutil -c icns "$ICONSET" -o "$APP_DIR/Contents/Resources/AppIcon.icns" 2>/dev/null; then
@@ -151,6 +151,10 @@ echo ""
 echo -e "${BLUE}Compiling Swift code...${NC}"
 echo "  Target: arm64-apple-macosx15.0 (M1/M3/M4)"
 
+# Gather all Swift source files from src/
+SWIFT_SOURCES=("$SCRIPT_DIR/src/"*.swift)
+echo "  Source files: ${#SWIFT_SOURCES[@]} files in src/"
+
 # Capture compilation output
 COMPILE_OUTPUT=$(swiftc \
     -swift-version 5 \
@@ -162,7 +166,7 @@ COMPILE_OUTPUT=$(swiftc \
     -framework ServiceManagement \
     -framework IOKit \
     -o "$APP_DIR/Contents/MacOS/HollywoodSaver" \
-    "$SCRIPT_DIR/HollywoodSaver.swift" 2>&1)
+    "${SWIFT_SOURCES[@]}" 2>&1)
 
 # Check for errors (not warnings)
 if echo "$COMPILE_OUTPUT" | grep -q "error:"; then
@@ -194,8 +198,8 @@ echo -e "  ${GREEN}✅${NC} Executable created (${EXEC_SIZE})"
 chmod +x "$APP_DIR/Contents/MacOS/HollywoodSaver"
 
 # Copy ABOUT.md into the app bundle
-if [ -f "$SCRIPT_DIR/ABOUT.md" ]; then
-    cp "$SCRIPT_DIR/ABOUT.md" "$APP_DIR/Contents/Resources/"
+if [ -f "$SCRIPT_DIR/docs/ABOUT.md" ]; then
+    cp "$SCRIPT_DIR/docs/ABOUT.md" "$APP_DIR/Contents/Resources/"
     echo -e "  ${GREEN}✅${NC} ABOUT.md included"
 fi
 

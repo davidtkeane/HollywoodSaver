@@ -2,6 +2,74 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [5.0.0] - 2026-04-05 — Architecture Refactor
+
+> **Architecture release.** Same feature set as v4.8.0, now living in a
+> clean modular codebase: 14 Swift files in `src/`, with `docs/`,
+> `images/`, `videos/`, and `gifs/` folders. Every v1.0 → v4.8 feature
+> remains free forever. No new features, no removed features — just a
+> grown-up project layout ready for the next chapter.
+
+### Added
+- **`src/` folder** — new home for all Swift source (14 focused files)
+- **`images/` folder** — app logo (`ranger.png`) and screenshots (`thematrix.png`)
+- **`docs/` folder** — project documentation (`ABOUT.md`, `CHANGELOG.md`)
+- **Dual icon lookup** — `iconImagePath()` now checks both `appFolder/ranger.png` (user custom drop) and `appFolder/images/ranger.png` (dev layout), preserving the user customization feature while supporting the new folder structure
+- **README docs links** — README now links to `docs/ABOUT.md` and `docs/CHANGELOG.md`
+
+### Changed
+- **DRY refactoring** — extracted three reusable helpers in `AppDelegate`:
+  - `targetScreens(for:)` — resolves screen preference (`all`/`builtin`/`external`) to `[NSScreen]`, used in 5 places
+  - `createFloatingOverlayWindow(rect:content:)` — standard transparent click-through window, shared by clock, break countdown, and sleep countdown overlays
+  - `restartClockIfActive()` — collapses 5 clock setters and `toggleClockDate` from ~11 lines each down to 3–5 lines
+  - **Net result: −75 lines** of duplicated code (3,674 → 3,599)
+- **Module split** — single `HollywoodSaver.swift` (3,599 lines) split into **14 files** inside `src/`:
+  | File | Responsibility |
+  |------|----------------|
+  | `main.swift` | App startup (`NSApplication` + delegate + run loop) |
+  | `AppDelegate.swift` | Main controller (~2,485 lines) |
+  | `Prefs.swift` | `UserDefaults` wrapper (37 preference keys) |
+  | `MatrixConfig.swift` | 6 Matrix Rain config enums |
+  | `MatrixRainView.swift` | Matrix Rain rendering |
+  | `VideoPlayerView.swift` | `AVQueuePlayer`-based video playback |
+  | `GifPlayerView.swift` | Frame-by-frame GIF animation |
+  | `ScreensaverWindow.swift` | Custom `NSWindow` + `ScreensaverContent` protocol |
+  | `InputMonitor.swift` | Global/local event monitoring |
+  | `SliderMenuView.swift` | Volume slider menu item |
+  | `BreakReminderView.swift` | Break screen overlay |
+  | `LockScreen.swift` | Lock overlay + password entry views |
+  | `CountdownOverlayView.swift` | Break/sleep countdown display |
+  | `ClockOverlayView.swift` | Floating clock display |
+- **Folder reorganization** — media and docs moved out of root:
+  - `videos/` — `.mp4`, `.mov`, `.m4v` (moved `hollywood.mp4`, `hq.mp4`)
+  - `gifs/` — `.gif` files (moved `demo.gif`)
+  - `images/` — app logo and screenshots (moved `ranger.png`, `thematrix.png`)
+  - `docs/` — `ABOUT.md`, `CHANGELOG.md` relocated here
+- **`build.sh`** — now compiles every file in `src/*.swift`, reads version from `src/AppDelegate.swift`, and reads icon source from `images/ranger.png`; `ABOUT.md` is copied from `docs/ABOUT.md` into the built bundle
+- **`README.md`** — project structure diagram rewritten to reflect the new layout, image paths updated (`gifs/demo.gif`, `images/thematrix.png`), docs links added
+- **Menu reorganization — Rain Effects nested inside Matrix Rain** — the top-level "Rain Effects" menu item has moved into the Matrix Rain submenu as a sibling of "Settings". Rationale: Rain Effects *are* Matrix Rain running in specific modes (behind/over windows), so grouping them under their parent feature is more discoverable. Settings stays focused on visual config (color/speed/characters/density/font/trail length), while Rain Effects holds the behavior toggles (Rain Behind, Rain Over, opacity sliders, display selection, Stop All Rain). Top-level menu is cleaner with one fewer item.
+- **Menu reorganization — Clock repositioned** — the top-level "Clock" submenu (briefly nested inside Break Reminder) now sits as its own top-level item between Break Reminder and Lock Screen, with a separator below. Rationale: Clock is an independent always-on overlay feature, not specifically tied to break timers — keeping it at top level with its own section makes it easier to reach. Clock keeps its full submenu (Show Clock, Show Date, Display, Position, Color, Size) intact.
+- **Menu reorganization — Sleep repositioned** — the "Sleep" submenu moved from the middle of the menu (previously between Desktop Shortcut and Break Reminder) to near the bottom, between Lock Screen and Contribute. Rationale: Sleep is an exit-style action like Lock/Quit, so grouping it with them at the bottom of the menu is more intuitive than mixing it with playback settings. Sleep submenu contents unchanged (Sleep Now, Sleep in 90/60/45/30/15 min, Custom, Sleep After Playback, Countdown Overlay, Resume Playback After Wake).
+- **Menu reorganization — features-first layout** — the menu is now organized into three clear zones separated by dividers: (1) **what to play** — media list + Matrix Rain, (2) **what to do** — Break Reminder, Clock, Lock Screen, Sleep (all feature submenus grouped together right under Matrix Rain), (3) **how to configure** — Sound, Volume, Opacity, Loop, Auto Play on Launch, Launch at Login, Show in Dock, Desktop Shortcut (flat toggles pushed to the bottom just above Contribute). Rationale: users open the menu to *do something*, not tweak settings — frequently-clicked features belong at the top. Matches the standard Mac app convention of features-first, preferences-last.
+
+### Fixed
+- **Menu bar icon regression** — after moving `ranger.png` to `images/`, the Swift runtime still looked only in `appFolder/ranger.png` and silently fell back to the `play.rectangle.fill` SF Symbol. Fixed by checking both legacy root and new `images/` paths. User customization (drop your own `ranger.png` next to the installed `.app`) still works exactly as before.
+- **Single-screen menu missing Screensaver/Ambient choice** — on MacBooks with no external monitor attached, clicking the menu bar icon showed flat "Play {video}" entries with no `>` submenu, silently forcing Screensaver mode. There was no way to trigger Ambient (live wallpaper) mode from a single-screen Mac. Now every video and Matrix Rain always shows a proper `>` submenu with **Screensaver** and **Ambient (keep working)** options — regardless of monitor configuration. `addScreenItems()` helper now skips the redundant "All Screens" row when there are no externals (it would just duplicate the Built-in row), keeping the menu clean. Fixes both video items and Matrix Rain in one go.
+
+### Technical Notes
+- Zero user-facing behavioural changes — the app looks and acts identically to v4.8.0
+- Zero new compile errors (22 pre-existing macOS 15 `CVDisplayLink` deprecation warnings are unchanged)
+- Compiled binary size unchanged at ~804 KB
+- All 37 preference keys preserved; `UserDefaults` data from older versions carries over seamlessly
+
+### Why
+Code quality groundwork before v5.0.0 Pro development. 14 focused files are
+far easier to navigate, diff, and review than one 3,600-line monolith —
+and the folder separation finally makes the repo look like a grown-up project.
+Easier onboarding for contributors, cleaner git blame, room to grow.
+
+---
+
 ## [4.8.0] - 2026-02-19 — FINAL FREE VERSION
 
 > **This is the last free release.** v5.0.0 begins the Pro version journey with registration,
