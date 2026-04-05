@@ -92,6 +92,11 @@ class Prefs {
         get { defaults.object(forKey: "starfieldGradient") != nil ? defaults.bool(forKey: "starfieldGradient") : true }
         set { defaults.set(newValue, forKey: "starfieldGradient") }
     }
+    /// Backdrop Layer B — distant galaxies (rotating elliptical glows). Default ON.
+    static var starfieldGalaxies: Bool {
+        get { defaults.object(forKey: "starfieldGalaxies") != nil ? defaults.bool(forKey: "starfieldGalaxies") : true }
+        set { defaults.set(newValue, forKey: "starfieldGalaxies") }
+    }
 
     // Rain Effects
     static var rainOverlayEnabled: Bool {

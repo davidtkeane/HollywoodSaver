@@ -85,8 +85,42 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         var isBlueTinted: Bool      // ~12% of stars get a cool blue tint for variety
     }
 
+    /// Distant galaxies — soft elliptical glows painted with radial gradients.
+    /// Rotate slowly over time. Each one picks a color palette on spawn.
+    struct Galaxy {
+        var centerX: CGFloat        // screen space
+        var centerY: CGFloat        // screen space
+        var width: CGFloat          // major axis (pre-rotation)
+        var height: CGFloat         // minor axis (makes it elliptical)
+        var baseRotation: CGFloat   // starting angle in radians
+        var rotationSpeed: CGFloat  // rad/sec — very slow drift
+        var coreColor: NSColor      // bright center of the gradient
+        var midColor: NSColor       // mid stop color
+        var maxAlpha: CGFloat       // peak alpha so galaxies don't overwhelm warp stars
+    }
+
+    /// Preset color palettes — each galaxy randomly picks one on spawn.
+    static let galaxyPalettes: [(core: NSColor, mid: NSColor)] = [
+        // Warm spiral — Milky Way / Sombrero vibe
+        (NSColor(red: 1.00, green: 0.95, blue: 0.82, alpha: 1),
+         NSColor(red: 0.85, green: 0.55, blue: 0.25, alpha: 1)),
+        // Cool spiral — Andromeda
+        (NSColor(red: 0.70, green: 0.85, blue: 1.00, alpha: 1),
+         NSColor(red: 0.35, green: 0.25, blue: 0.70, alpha: 1)),
+        // Pink nebula — Helix / NGC 2392
+        (NSColor(red: 1.00, green: 0.70, blue: 0.90, alpha: 1),
+         NSColor(red: 0.70, green: 0.20, blue: 0.55, alpha: 1)),
+        // Teal cluster — Cat's Eye vibe
+        (NSColor(red: 0.50, green: 1.00, blue: 0.90, alpha: 1),
+         NSColor(red: 0.20, green: 0.50, blue: 0.70, alpha: 1)),
+        // Amber nebula — Orion-ish
+        (NSColor(red: 1.00, green: 0.85, blue: 0.50, alpha: 1),
+         NSColor(red: 0.80, green: 0.30, blue: 0.10, alpha: 1)),
+    ]
+
     var stars: [Star] = []
     var backgroundStars: [BackgroundStar] = []
+    var galaxies: [Galaxy] = []
     var speed: StarfieldSpeed
     var colorTheme: StarfieldColor
     var density: StarfieldDensity
@@ -113,6 +147,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         layer?.backgroundColor = NSColor.black.cgColor
         spawnStars()
         spawnBackgroundStars()
+        spawnGalaxies()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -142,6 +177,75 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 size: CGFloat.random(in: 0.8...2.2),
                 isBlueTinted: CGFloat.random(in: 0...1) < 0.12  // ~12% blue stars
             )
+        }
+    }
+
+    func spawnGalaxies() {
+        galaxies = []
+        let cx = bounds.width / 2
+        let cy = bounds.height / 2
+        // Keep galaxies away from the warp vanishing point so they don't
+        // obscure the center (which is where the warp streaks emerge).
+        let minDistFromCenter = min(bounds.width, bounds.height) * 0.22
+        // Scale inter-galaxy spacing with screen size so the distribution
+        // feels right on both a 13" laptop and a 32" external.
+        let minDistBetweenGalaxies = min(bounds.width, bounds.height) * 0.28
+
+        // Distance tiers create depth perception: big bright galaxies feel
+        // close, small dim ones feel far away. Each tier is (widthRange,
+        // heightRange, alphaRange). Shuffled so layouts vary per launch.
+        typealias Tier = (
+            widthRange: ClosedRange<CGFloat>,
+            heightRange: ClosedRange<CGFloat>,
+            alphaRange: ClosedRange<CGFloat>
+        )
+        var tiers: [Tier] = [
+            (480...700, 150...230, 0.40...0.55),  // NEAR — 1 big, bright, dominant
+            (300...440, 100...170, 0.28...0.42),  // MID — 2 medium
+            (300...440, 100...170, 0.28...0.42),
+            (150...260, 55...110, 0.18...0.30),   // FAR — 2 small, dim
+            (150...260, 55...110, 0.18...0.30),
+        ]
+        tiers.shuffle()
+
+        // Track which palettes are used so we get color variety across
+        // all galaxies in the scene (no two the same if we can help it).
+        var availablePalettes = StarfieldWarpView.galaxyPalettes.shuffled()
+
+        for tier in tiers {
+            var posX: CGFloat = 0
+            var posY: CGFloat = 0
+            var attempts = 0
+            let edgePadding: CGFloat = 60
+            while attempts < 40 {
+                posX = CGFloat.random(in: edgePadding...(bounds.width - edgePadding))
+                posY = CGFloat.random(in: edgePadding...(bounds.height - edgePadding))
+                let okFromCenter = hypot(posX - cx, posY - cy) >= minDistFromCenter
+                let okSpacing = galaxies.allSatisfy { existing in
+                    hypot(posX - existing.centerX, posY - existing.centerY) >= minDistBetweenGalaxies
+                }
+                if okFromCenter && okSpacing { break }
+                attempts += 1
+            }
+
+            // Pop a palette (refill if exhausted — for 5 galaxies on 5 palettes
+            // this means each galaxy gets a unique color).
+            if availablePalettes.isEmpty {
+                availablePalettes = StarfieldWarpView.galaxyPalettes.shuffled()
+            }
+            let palette = availablePalettes.removeLast()
+
+            galaxies.append(Galaxy(
+                centerX: posX,
+                centerY: posY,
+                width: CGFloat.random(in: tier.widthRange),
+                height: CGFloat.random(in: tier.heightRange),
+                baseRotation: CGFloat.random(in: 0...(2 * .pi)),
+                rotationSpeed: CGFloat.random(in: 0.01...0.04),
+                coreColor: palette.core,
+                midColor: palette.mid,
+                maxAlpha: CGFloat.random(in: tier.alphaRange)
+            ))
         }
     }
 
@@ -253,6 +357,53 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         } else {
             context.setFillColor(NSColor.black.cgColor)
             context.fill(bounds)
+        }
+
+        // ──────────────────────────────────────────────
+        // BACKDROP LAYER B — Distant Galaxies
+        // Soft elliptical glows painted with radial gradients. Slowly
+        // rotate over time. 4 galaxies per scene, placed away from the
+        // warp vanishing point. Rendered between the gradient (back)
+        // and the background stars (front), so dust specks sit on top.
+        // ──────────────────────────────────────────────
+        if Prefs.starfieldGalaxies {
+            let now = CGFloat(CACurrentMediaTime())
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            for galaxy in galaxies {
+                let rotation = galaxy.baseRotation + now * galaxy.rotationSpeed
+
+                context.saveGState()
+                context.translateBy(x: galaxy.centerX, y: galaxy.centerY)
+                context.rotate(by: rotation)
+                // Scale Y to flatten the circular gradient into an ellipse.
+                // Use larger dimension as the "radius" we draw, then scale down.
+                let aspectY = galaxy.height / galaxy.width
+                context.scaleBy(x: 1, y: aspectY)
+
+                let colors = [
+                    galaxy.coreColor.withAlphaComponent(galaxy.maxAlpha).cgColor,
+                    galaxy.midColor.withAlphaComponent(galaxy.maxAlpha * 0.45).cgColor,
+                    NSColor.clear.cgColor
+                ]
+                let locations: [CGFloat] = [0, 0.45, 1]
+
+                if let gradient = CGGradient(
+                    colorsSpace: colorSpace,
+                    colors: colors as CFArray,
+                    locations: locations
+                ) {
+                    context.drawRadialGradient(
+                        gradient,
+                        startCenter: .zero,
+                        startRadius: 0,
+                        endCenter: .zero,
+                        endRadius: galaxy.width / 2,
+                        options: []
+                    )
+                }
+
+                context.restoreGState()
+            }
         }
 
         // ──────────────────────────────────────────────

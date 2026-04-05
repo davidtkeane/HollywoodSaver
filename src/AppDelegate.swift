@@ -578,6 +578,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         gradientToggle.state = Prefs.starfieldGradient ? .on : .off
         starfieldBackdropMenu.addItem(gradientToggle)
 
+        let galaxiesToggle = NSMenuItem(title: "Distant Galaxies", action: #selector(toggleStarfieldGalaxies), keyEquivalent: "")
+        galaxiesToggle.state = Prefs.starfieldGalaxies ? .on : .off
+        starfieldBackdropMenu.addItem(galaxiesToggle)
+
         starfieldBackdropItem.submenu = starfieldBackdropMenu
         starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
 
@@ -1562,6 +1566,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleStarfieldGradient() {
         Prefs.starfieldGradient = !Prefs.starfieldGradient
+    }
+
+    @objc func toggleStarfieldGalaxies() {
+        Prefs.starfieldGalaxies = !Prefs.starfieldGalaxies
     }
 
     // MARK: - Break Reminder
