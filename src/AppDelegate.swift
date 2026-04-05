@@ -582,6 +582,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         galaxiesToggle.state = Prefs.starfieldGalaxies ? .on : .off
         starfieldBackdropMenu.addItem(galaxiesToggle)
 
+        let nebulaeToggle = NSMenuItem(title: "Nebula Clouds", action: #selector(toggleStarfieldNebulae), keyEquivalent: "")
+        nebulaeToggle.state = Prefs.starfieldNebulae ? .on : .off
+        starfieldBackdropMenu.addItem(nebulaeToggle)
+
         starfieldBackdropItem.submenu = starfieldBackdropMenu
         starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
 
@@ -1570,6 +1574,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleStarfieldGalaxies() {
         Prefs.starfieldGalaxies = !Prefs.starfieldGalaxies
+    }
+
+    @objc func toggleStarfieldNebulae() {
+        Prefs.starfieldNebulae = !Prefs.starfieldNebulae
     }
 
     // MARK: - Break Reminder

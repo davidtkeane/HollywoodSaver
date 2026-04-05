@@ -97,6 +97,11 @@ class Prefs {
         get { defaults.object(forKey: "starfieldGalaxies") != nil ? defaults.bool(forKey: "starfieldGalaxies") : true }
         set { defaults.set(newValue, forKey: "starfieldGalaxies") }
     }
+    /// Backdrop Layer C — drifting nebula clouds (atmospheric color wash). Default ON.
+    static var starfieldNebulae: Bool {
+        get { defaults.object(forKey: "starfieldNebulae") != nil ? defaults.bool(forKey: "starfieldNebulae") : true }
+        set { defaults.set(newValue, forKey: "starfieldNebulae") }
+    }
 
     // Rain Effects
     static var rainOverlayEnabled: Bool {

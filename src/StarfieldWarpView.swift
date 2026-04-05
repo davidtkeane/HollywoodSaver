@@ -99,6 +99,29 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         var maxAlpha: CGFloat       // peak alpha so galaxies don't overwhelm warp stars
     }
 
+    /// Drifting nebula clouds — huge diffuse color blobs that slowly wash
+    /// across the scene. Much softer than galaxies (no bright core, very low
+    /// alpha), much bigger, and they actually move instead of just rotating.
+    struct Nebula {
+        var centerX: CGFloat        // screen space — mutates as it drifts
+        var centerY: CGFloat
+        var velocityX: CGFloat      // px/sec — very slow
+        var velocityY: CGFloat      // px/sec
+        var radius: CGFloat         // 450–850 px (much bigger than galaxies)
+        var color: NSColor          // diffuse wash color
+        var maxAlpha: CGFloat       // 0.08–0.16 (very subtle — atmospheric)
+        var pulsePhase: CGFloat     // for gentle breathe effect
+    }
+
+    /// Atmospheric cloud colors — deep purples, pinks, teals, violets.
+    static let nebulaPalettes: [NSColor] = [
+        NSColor(red: 0.70, green: 0.30, blue: 0.90, alpha: 1),   // deep purple
+        NSColor(red: 0.90, green: 0.40, blue: 0.70, alpha: 1),   // pink/magenta
+        NSColor(red: 0.30, green: 0.70, blue: 0.90, alpha: 1),   // teal/cyan
+        NSColor(red: 0.95, green: 0.55, blue: 0.30, alpha: 1),   // amber/rose
+        NSColor(red: 0.50, green: 0.30, blue: 0.85, alpha: 1),   // violet
+    ]
+
     /// Preset color palettes — each galaxy randomly picks one on spawn.
     static let galaxyPalettes: [(core: NSColor, mid: NSColor)] = [
         // Warm spiral — Milky Way / Sombrero vibe
@@ -121,6 +144,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
     var stars: [Star] = []
     var backgroundStars: [BackgroundStar] = []
     var galaxies: [Galaxy] = []
+    var nebulae: [Nebula] = []
     var speed: StarfieldSpeed
     var colorTheme: StarfieldColor
     var density: StarfieldDensity
@@ -148,6 +172,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         spawnStars()
         spawnBackgroundStars()
         spawnGalaxies()
+        spawnNebulae()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -249,6 +274,35 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         }
     }
 
+    func spawnNebulae() {
+        nebulae = []
+        let count = 3  // 3 drifting color washes — enough to tint the scene without smothering
+        var availableColors = StarfieldWarpView.nebulaPalettes.shuffled()
+
+        for _ in 0..<count {
+            if availableColors.isEmpty {
+                availableColors = StarfieldWarpView.nebulaPalettes.shuffled()
+            }
+            let color = availableColors.removeLast()
+
+            // Random drift direction + slow speed (4–12 px/sec). At 12 px/sec
+            // a nebula takes about 160 seconds to cross a 1920 px screen.
+            let angle = CGFloat.random(in: 0...(2 * .pi))
+            let speed = CGFloat.random(in: 4...12)
+
+            nebulae.append(Nebula(
+                centerX: CGFloat.random(in: 0...bounds.width),
+                centerY: CGFloat.random(in: 0...bounds.height),
+                velocityX: cos(angle) * speed,
+                velocityY: sin(angle) * speed,
+                radius: CGFloat.random(in: 450...850),
+                color: color,
+                maxAlpha: CGFloat.random(in: 0.08...0.16),
+                pulsePhase: CGFloat.random(in: 0...(2 * .pi))
+            ))
+        }
+    }
+
     // MARK: - Playback lifecycle
 
     func startPlayback() {
@@ -316,6 +370,27 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 stars[i].hasPrev = false   // first frame after spawn: draw dot, not line
             }
         }
+
+        // Drift nebulae across the scene and wrap around screen edges
+        // (toroidal space — when a nebula goes off one side it re-emerges
+        // from the opposite side). Uses dt so drift is framerate-independent.
+        let dtF = CGFloat(dt)
+        for i in 0..<nebulae.count {
+            nebulae[i].centerX += nebulae[i].velocityX * dtF
+            nebulae[i].centerY += nebulae[i].velocityY * dtF
+
+            let r = nebulae[i].radius
+            if nebulae[i].centerX > bounds.width + r {
+                nebulae[i].centerX = -r
+            } else if nebulae[i].centerX < -r {
+                nebulae[i].centerX = bounds.width + r
+            }
+            if nebulae[i].centerY > bounds.height + r {
+                nebulae[i].centerY = -r
+            } else if nebulae[i].centerY < -r {
+                nebulae[i].centerY = bounds.height + r
+            }
+        }
     }
 
     // MARK: - Rendering
@@ -357,6 +432,47 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         } else {
             context.setFillColor(NSColor.black.cgColor)
             context.fill(bounds)
+        }
+
+        // ──────────────────────────────────────────────
+        // BACKDROP LAYER C — Nebula Clouds
+        // Huge soft color blobs that slowly drift across the scene. Much
+        // bigger + softer + more diffuse than galaxies. Very low alpha
+        // (0.08–0.16) so they wash the backdrop with color without
+        // competing with the foreground warp streaks. 4 color stops for
+        // extra-smooth falloff. Gentle pulse via CACurrentMediaTime.
+        // ──────────────────────────────────────────────
+        if Prefs.starfieldNebulae {
+            let nowC = CGFloat(CACurrentMediaTime())
+            let nebulaColorSpace = CGColorSpaceCreateDeviceRGB()
+            for nebula in nebulae {
+                // Subtle breathe — alpha oscillates between 70% and 100% of max.
+                let pulse = (sin(nowC * 0.25 + nebula.pulsePhase) + 1) / 2
+                let alpha = nebula.maxAlpha * (0.7 + pulse * 0.3)
+
+                let colors = [
+                    nebula.color.withAlphaComponent(alpha).cgColor,
+                    nebula.color.withAlphaComponent(alpha * 0.6).cgColor,
+                    nebula.color.withAlphaComponent(alpha * 0.2).cgColor,
+                    NSColor.clear.cgColor
+                ]
+                let locations: [CGFloat] = [0, 0.35, 0.7, 1]
+
+                if let gradient = CGGradient(
+                    colorsSpace: nebulaColorSpace,
+                    colors: colors as CFArray,
+                    locations: locations
+                ) {
+                    context.drawRadialGradient(
+                        gradient,
+                        startCenter: CGPoint(x: nebula.centerX, y: nebula.centerY),
+                        startRadius: 0,
+                        endCenter: CGPoint(x: nebula.centerX, y: nebula.centerY),
+                        endRadius: nebula.radius,
+                        options: []
+                    )
+                }
+            }
         }
 
         // ──────────────────────────────────────────────
