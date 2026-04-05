@@ -112,6 +112,16 @@ class Prefs {
         get { defaults.string(forKey: "starfieldPlanetsCount") ?? "random" }
         set { defaults.set(newValue, forKey: "starfieldPlanetsCount") }
     }
+    /// Passing comets — diagonal streaks every 30–90s. Default ON.
+    static var starfieldPassingComets: Bool {
+        get { defaults.object(forKey: "starfieldPassingComets") != nil ? defaults.bool(forKey: "starfieldPassingComets") : true }
+        set { defaults.set(newValue, forKey: "starfieldPassingComets") }
+    }
+    /// Screen-dive comet Easter egg — max 1-2 per session. Default ON.
+    static var starfieldDiveComet: Bool {
+        get { defaults.object(forKey: "starfieldDiveComet") != nil ? defaults.bool(forKey: "starfieldDiveComet") : true }
+        set { defaults.set(newValue, forKey: "starfieldDiveComet") }
+    }
 
     // Rain Effects
     static var rainOverlayEnabled: Bool {

@@ -614,6 +614,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         planetsItem.submenu = planetsMenu
         starfieldBackdropMenu.addItem(planetsItem)
 
+        // Comets submenu — passing comets + screen-dive Easter egg
+        starfieldBackdropMenu.addItem(NSMenuItem.separator())
+        let cometsItem = NSMenuItem(title: "Comets", action: nil, keyEquivalent: "")
+        let cometsMenu = NSMenu()
+
+        let passingCometsToggle = NSMenuItem(title: "Passing Comets", action: #selector(toggleStarfieldPassingComets), keyEquivalent: "")
+        passingCometsToggle.state = Prefs.starfieldPassingComets ? .on : .off
+        cometsMenu.addItem(passingCometsToggle)
+
+        let diveCometToggle = NSMenuItem(title: "Screen-Dive Comet 🎯", action: #selector(toggleStarfieldDiveComet), keyEquivalent: "")
+        diveCometToggle.state = Prefs.starfieldDiveComet ? .on : .off
+        cometsMenu.addItem(diveCometToggle)
+
+        cometsMenu.addItem(NSMenuItem.separator())
+
+        // Debug trigger — forces the dive comet animation NOW for testing
+        let triggerDive = NSMenuItem(title: "🎬 Trigger Screen-Dive Now", action: #selector(triggerStarfieldDiveCometNow), keyEquivalent: "")
+        cometsMenu.addItem(triggerDive)
+
+        cometsItem.submenu = cometsMenu
+        starfieldBackdropMenu.addItem(cometsItem)
+
         starfieldBackdropItem.submenu = starfieldBackdropMenu
         starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
 
@@ -1615,6 +1637,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func setStarfieldPlanetsCount(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.starfieldPlanetsCount = value
+    }
+
+    @objc func toggleStarfieldPassingComets() {
+        Prefs.starfieldPassingComets = !Prefs.starfieldPassingComets
+    }
+
+    @objc func toggleStarfieldDiveComet() {
+        Prefs.starfieldDiveComet = !Prefs.starfieldDiveComet
+    }
+
+    @objc func triggerStarfieldDiveCometNow() {
+        // Find any currently-playing StarfieldWarpView and trigger the animation on it.
+        for view in contentViews {
+            if let starfield = view as? StarfieldWarpView {
+                starfield.triggerDiveComet(now: CACurrentMediaTime())
+            }
+        }
     }
 
     // MARK: - Break Reminder

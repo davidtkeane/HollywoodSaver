@@ -99,6 +99,41 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         var maxAlpha: CGFloat       // peak alpha so galaxies don't overwhelm warp stars
     }
 
+    /// A regular passing comet — diagonal streak with fading tail. Spawns
+    /// occasionally (every 30–90s), lives for ~1–2 seconds, then disappears.
+    struct PassingComet {
+        var startX: CGFloat
+        var startY: CGFloat
+        var velocityX: CGFloat
+        var velocityY: CGFloat
+        var spawnTime: CFTimeInterval
+        var lifetime: Double         // total seconds alive
+        var age: Double              // current age
+        var tailLength: CGFloat      // px
+    }
+
+    /// THE screen-dive comet Easter egg 🎯 — a comet that flies directly
+    /// at the viewer. Capped to 1–2 times per session. Runs through four
+    /// phases over ~3 seconds: approach → accelerate → whoosh past → fade.
+    enum DiveCometPhase {
+        case idle          // waiting (no active dive comet)
+        case approach      // small distant dot, slowly brightening (2.0s)
+        case accelerate    // rapid growth + glow halo (0.5s)
+        case whoosh        // flash off to a screen edge (0.3s)
+        case fade          // brief afterglow (0.4s)
+    }
+
+    struct DiveComet {
+        var phase: DiveCometPhase = .idle
+        var phaseStart: CFTimeInterval = 0
+        var startX: CGFloat = 0         // spawn position (near center during approach)
+        var startY: CGFloat = 0
+        var exitX: CGFloat = 0          // whoosh target on screen edge
+        var exitY: CGFloat = 0
+        var currentRadius: CGFloat = 0
+        var currentBrightness: CGFloat = 0
+    }
+
     /// Planet types — 5 variants, each with its own size range and base color.
     enum PlanetType: CaseIterable {
         case gasGiant      // Jupiter — big, warm amber
@@ -192,6 +227,14 @@ class StarfieldWarpView: NSView, ScreensaverContent {
     var galaxies: [Galaxy] = []
     var nebulae: [Nebula] = []
     var planets: [Planet] = []
+
+    // Comets
+    var passingComets: [PassingComet] = []
+    var nextPassingCometTime: CFTimeInterval = 0     // absolute time to spawn next
+    var diveComet = DiveComet()
+    var diveCometsTriggeredThisSession = 0
+    var lastDiveCometTime: CFTimeInterval = 0        // when the last dive comet finished
+    var viewStartTime: CFTimeInterval = 0            // when the view began playback
     var speed: StarfieldSpeed
     var colorTheme: StarfieldColor
     var density: StarfieldDensity
@@ -427,6 +470,10 @@ class StarfieldWarpView: NSView, ScreensaverContent {
 
     func startPlayback() {
         lastTimestamp = 0
+        viewStartTime = CACurrentMediaTime()
+        diveCometsTriggeredThisSession = 0
+        lastDiveCometTime = 0
+        nextPassingCometTime = viewStartTime + Double.random(in: 15...45)   // first comet within 15-45s
 
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
         guard let link = displayLink else { return }
@@ -511,6 +558,165 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 nebulae[i].centerY = bounds.height + r
             }
         }
+
+        // ── COMETS ──
+        updateComets(dt: dt)
+    }
+
+    // MARK: - Comet simulation
+
+    func updateComets(dt: Double) {
+        let now = CACurrentMediaTime()
+        if viewStartTime == 0 { viewStartTime = now }
+
+        // Passing comets — spawn timer + age-based cleanup
+        if Prefs.starfieldPassingComets {
+            // Spawn a new one if we're past the next scheduled time and no
+            // passing comet is currently active.
+            if now >= nextPassingCometTime && passingComets.isEmpty {
+                spawnPassingComet(at: now)
+                nextPassingCometTime = now + Double.random(in: 30...90)
+            }
+            // Age existing ones and remove expired.
+            for i in 0..<passingComets.count {
+                passingComets[i].age += dt
+                passingComets[i].startX += passingComets[i].velocityX * CGFloat(dt)
+                passingComets[i].startY += passingComets[i].velocityY * CGFloat(dt)
+            }
+            passingComets.removeAll { $0.age >= $0.lifetime }
+        } else {
+            passingComets.removeAll()
+        }
+
+        // Screen-dive comet state machine 🎯
+        if Prefs.starfieldDiveComet {
+            updateDiveComet(now: now)
+        } else if diveComet.phase != .idle {
+            // If the toggle flipped off mid-animation, reset cleanly.
+            diveComet.phase = .idle
+        }
+    }
+
+    func spawnPassingComet(at now: CFTimeInterval) {
+        // Pick a random edge to enter from and a random angle going across.
+        let entryEdge = Int.random(in: 0..<4)    // 0=top 1=right 2=bottom 3=left
+        var sx: CGFloat = 0
+        var sy: CGFloat = 0
+        switch entryEdge {
+        case 0: sx = CGFloat.random(in: 0...bounds.width); sy = bounds.height + 50
+        case 1: sx = bounds.width + 50; sy = CGFloat.random(in: 0...bounds.height)
+        case 2: sx = CGFloat.random(in: 0...bounds.width); sy = -50
+        default: sx = -50; sy = CGFloat.random(in: 0...bounds.height)
+        }
+
+        // Head toward the rough center with some variation
+        let targetX = CGFloat.random(in: bounds.width * 0.3...bounds.width * 0.7)
+        let targetY = CGFloat.random(in: bounds.height * 0.3...bounds.height * 0.7)
+        let dx = targetX - sx
+        let dy = targetY - sy
+        let dist = hypot(dx, dy)
+        let speed: CGFloat = 700  // px/sec — fast
+        let vx = dx / dist * speed
+        let vy = dy / dist * speed
+
+        passingComets.append(PassingComet(
+            startX: sx,
+            startY: sy,
+            velocityX: vx,
+            velocityY: vy,
+            spawnTime: now,
+            lifetime: Double.random(in: 1.2...2.0),
+            age: 0,
+            tailLength: CGFloat.random(in: 90...160)
+        ))
+    }
+
+    func updateDiveComet(now: CFTimeInterval) {
+        let phaseElapsed = now - diveComet.phaseStart
+        let sessionElapsed = now - viewStartTime
+
+        switch diveComet.phase {
+        case .idle:
+            // Trigger conditions:
+            //  1. Wait at least 2 minutes after starting playback (so it's a surprise)
+            //  2. Max 2 triggers per session
+            //  3. Min 10 minutes between triggers
+            //  4. Random 0.5% chance per tick once eligible
+            let eligibleByTime = sessionElapsed >= 120
+            let eligibleByCount = diveCometsTriggeredThisSession < 2
+            let eligibleByCooldown = (lastDiveCometTime == 0) || (now - lastDiveCometTime >= 600)
+            if eligibleByTime && eligibleByCount && eligibleByCooldown {
+                if Double.random(in: 0...1) < 0.005 {
+                    triggerDiveComet(now: now)
+                }
+            }
+        case .approach:
+            // 2.0 seconds — small dot near center, slowly growing
+            let t = min(phaseElapsed / 2.0, 1.0)
+            diveComet.currentRadius = CGFloat(t * t) * 12.0    // ease-in to 12 px
+            diveComet.currentBrightness = CGFloat(0.4 + t * 0.4)
+            if phaseElapsed >= 2.0 {
+                diveComet.phase = .accelerate
+                diveComet.phaseStart = now
+            }
+        case .accelerate:
+            // 0.5 seconds — explosive growth from 12 px → 120 px with glow halo
+            let t = min(phaseElapsed / 0.5, 1.0)
+            let eased = CGFloat(t * t * t)    // cubic ease-in for that "RUSH" feel
+            diveComet.currentRadius = 12 + eased * 108    // 12 → 120
+            diveComet.currentBrightness = 0.8 + eased * 0.2
+            if phaseElapsed >= 0.5 {
+                diveComet.phase = .whoosh
+                diveComet.phaseStart = now
+            }
+        case .whoosh:
+            // 0.3 seconds — flash past to edge
+            let t = min(phaseElapsed / 0.3, 1.0)
+            let eased = CGFloat(t)
+            let cx = bounds.width / 2
+            let cy = bounds.height / 2
+            diveComet.startX = cx + (diveComet.exitX - cx) * eased
+            diveComet.startY = cy + (diveComet.exitY - cy) * eased
+            diveComet.currentRadius = 120 * (1 - CGFloat(t) * 0.6)    // shrinks slightly
+            diveComet.currentBrightness = 1.0
+            if phaseElapsed >= 0.3 {
+                diveComet.phase = .fade
+                diveComet.phaseStart = now
+            }
+        case .fade:
+            // 0.4 seconds — afterglow fade
+            let t = min(phaseElapsed / 0.4, 1.0)
+            diveComet.currentBrightness = 1.0 - CGFloat(t)
+            diveComet.currentRadius *= 0.92
+            if phaseElapsed >= 0.4 {
+                diveComet.phase = .idle
+                diveComet.currentBrightness = 0
+                diveComet.currentRadius = 0
+                lastDiveCometTime = now
+                diveCometsTriggeredThisSession += 1
+            }
+        }
+    }
+
+    /// Start the dive-comet animation now (used by the random trigger AND the
+    /// debug menu action for manual testing).
+    func triggerDiveComet(now: CFTimeInterval) {
+        let cx = bounds.width / 2
+        let cy = bounds.height / 2
+        // Pick a random edge for the whoosh exit point.
+        let edge = Int.random(in: 0..<4)
+        switch edge {
+        case 0: diveComet.exitX = CGFloat.random(in: 0...bounds.width); diveComet.exitY = bounds.height + 150
+        case 1: diveComet.exitX = bounds.width + 150; diveComet.exitY = CGFloat.random(in: 0...bounds.height)
+        case 2: diveComet.exitX = CGFloat.random(in: 0...bounds.width); diveComet.exitY = -150
+        default: diveComet.exitX = -150; diveComet.exitY = CGFloat.random(in: 0...bounds.height)
+        }
+        diveComet.startX = cx
+        diveComet.startY = cy
+        diveComet.currentRadius = 0
+        diveComet.currentBrightness = 0.4
+        diveComet.phase = .approach
+        diveComet.phaseStart = now
     }
 
     // MARK: - Rendering
@@ -776,6 +982,114 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                         height: planet.moonRadius * 2
                     ))
                 }
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // PASSING COMETS — diagonal streaks with fading tails
+        // ──────────────────────────────────────────────
+        if Prefs.starfieldPassingComets && !passingComets.isEmpty {
+            for comet in passingComets {
+                // Fade in and out over lifetime
+                let lifeFraction = comet.age / comet.lifetime
+                let alpha: CGFloat
+                if lifeFraction < 0.2 {
+                    alpha = CGFloat(lifeFraction / 0.2)
+                } else if lifeFraction > 0.8 {
+                    alpha = CGFloat((1.0 - lifeFraction) / 0.2)
+                } else {
+                    alpha = 1.0
+                }
+
+                // Tail points backward along the velocity vector
+                let vMag = hypot(comet.velocityX, comet.velocityY)
+                let tailDX = -comet.velocityX / vMag * comet.tailLength
+                let tailDY = -comet.velocityY / vMag * comet.tailLength
+                let tailEndX = comet.startX + tailDX
+                let tailEndY = comet.startY + tailDY
+
+                // Draw the tail as a gradient line (bright head → fade)
+                let tailColors = [
+                    NSColor(red: 0.85, green: 0.95, blue: 1.0, alpha: alpha).cgColor,
+                    NSColor(red: 0.7, green: 0.85, blue: 1.0, alpha: alpha * 0.4).cgColor,
+                    NSColor.clear.cgColor
+                ]
+                let tailLocations: [CGFloat] = [0, 0.4, 1]
+                if let tailGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: tailColors as CFArray, locations: tailLocations) {
+                    context.saveGState()
+                    context.setLineWidth(2.5)
+                    context.setLineCap(.round)
+                    // Use the gradient as a stroke pattern by clipping a thick line and drawing the gradient
+                    context.move(to: CGPoint(x: comet.startX, y: comet.startY))
+                    context.addLine(to: CGPoint(x: tailEndX, y: tailEndY))
+                    context.replacePathWithStrokedPath()
+                    context.clip()
+                    context.drawLinearGradient(
+                        tailGradient,
+                        start: CGPoint(x: comet.startX, y: comet.startY),
+                        end: CGPoint(x: tailEndX, y: tailEndY),
+                        options: []
+                    )
+                    context.restoreGState()
+                }
+
+                // Bright comet head
+                context.setFillColor(NSColor(red: 1, green: 1, blue: 1, alpha: alpha).cgColor)
+                context.fillEllipse(in: CGRect(
+                    x: comet.startX - 3,
+                    y: comet.startY - 3,
+                    width: 6,
+                    height: 6
+                ))
+                // Glow halo
+                context.setFillColor(NSColor(red: 0.8, green: 0.9, blue: 1, alpha: alpha * 0.4).cgColor)
+                context.fillEllipse(in: CGRect(
+                    x: comet.startX - 8,
+                    y: comet.startY - 8,
+                    width: 16,
+                    height: 16
+                ))
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // SCREEN-DIVE COMET 🎯 — the Easter egg
+        // ──────────────────────────────────────────────
+        if Prefs.starfieldDiveComet && diveComet.phase != .idle {
+            let r = diveComet.currentRadius
+            let b = diveComet.currentBrightness
+            let px = diveComet.startX
+            let py = diveComet.startY
+
+            // Expanding outer halo (biggest, most diffuse)
+            let haloRadius = r * 3.5
+            if let haloGradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [
+                    NSColor(red: 1, green: 1, blue: 1, alpha: b * 0.5).cgColor,
+                    NSColor(red: 0.7, green: 0.85, blue: 1, alpha: b * 0.15).cgColor,
+                    NSColor.clear.cgColor
+                ] as CFArray,
+                locations: [0, 0.4, 1]
+            ) {
+                context.drawRadialGradient(
+                    haloGradient,
+                    startCenter: CGPoint(x: px, y: py),
+                    startRadius: 0,
+                    endCenter: CGPoint(x: px, y: py),
+                    endRadius: haloRadius,
+                    options: []
+                )
+            }
+            // Bright core
+            context.setFillColor(NSColor(red: 1, green: 1, blue: 1, alpha: b).cgColor)
+            context.fillEllipse(in: CGRect(x: px - r, y: py - r, width: r * 2, height: r * 2))
+
+            // During the whoosh phase, add a bright screen flash at peak
+            if diveComet.phase == .whoosh {
+                let flashAlpha = b * 0.2
+                context.setFillColor(NSColor(white: 1, alpha: flashAlpha).cgColor)
+                context.fill(bounds)
             }
         }
 
