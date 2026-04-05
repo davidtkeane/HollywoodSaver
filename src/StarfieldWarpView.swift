@@ -99,6 +99,47 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         var maxAlpha: CGFloat       // peak alpha so galaxies don't overwhelm warp stars
     }
 
+    /// Spacecraft silhouettes Easter egg — rare sci-fi ships that drift
+    /// across the scene. Drawn as dark silhouettes with subtle rim lighting
+    /// so they read against the cosmic backdrop without being obvious.
+    enum SpacecraftType: CaseIterable {
+        case falcon       // Millennium Falcon
+        case enterprise   // USS Enterprise NCC-1701
+        case tardis       // TARDIS police box
+        case serenity     // Firefly-class ship
+        case ufo          // Classic flying saucer
+
+        var displayName: String {
+            switch self {
+            case .falcon:     return "Millennium Falcon"
+            case .enterprise: return "USS Enterprise"
+            case .tardis:     return "TARDIS"
+            case .serenity:   return "Serenity"
+            case .ufo:        return "UFO"
+            }
+        }
+
+        /// Bounding box half-width used for edge spawn placement.
+        var halfWidth: CGFloat {
+            switch self {
+            case .falcon:     return 32
+            case .enterprise: return 35
+            case .tardis:     return 14
+            case .serenity:   return 35
+            case .ufo:        return 28
+            }
+        }
+    }
+
+    struct Spacecraft {
+        var type: SpacecraftType
+        var x: CGFloat
+        var y: CGFloat
+        var velocityX: CGFloat     // px/sec
+        var velocityY: CGFloat     // slight vertical drift for variety
+        var flipped: Bool          // mirror horizontally so nose faces direction of travel
+    }
+
     /// A regular passing comet — diagonal streak with fading tail. Spawns
     /// occasionally (every 30–90s), lives for ~1–2 seconds, then disappears.
     struct PassingComet {
@@ -235,6 +276,11 @@ class StarfieldWarpView: NSView, ScreensaverContent {
     var diveCometsTriggeredThisSession = 0
     var lastDiveCometTime: CFTimeInterval = 0        // when the last dive comet finished
     var viewStartTime: CFTimeInterval = 0            // when the view began playback
+
+    // Spacecraft silhouettes
+    var spacecraft: [Spacecraft] = []
+    var lastSpacecraftTime: CFTimeInterval = 0
+    var spacecraftSpawnedThisSession = 0
     var speed: StarfieldSpeed
     var colorTheme: StarfieldColor
     var density: StarfieldDensity
@@ -474,6 +520,9 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         diveCometsTriggeredThisSession = 0
         lastDiveCometTime = 0
         nextPassingCometTime = viewStartTime + Double.random(in: 15...45)   // first comet within 15-45s
+        spacecraftSpawnedThisSession = 0
+        lastSpacecraftTime = 0
+        spacecraft.removeAll()
 
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
         guard let link = displayLink else { return }
@@ -561,6 +610,9 @@ class StarfieldWarpView: NSView, ScreensaverContent {
 
         // ── COMETS ──
         updateComets(dt: dt)
+
+        // ── SPACECRAFT SILHOUETTES ──
+        updateSpacecraft(dt: dt)
     }
 
     // MARK: - Comet simulation
@@ -696,6 +748,209 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 diveCometsTriggeredThisSession += 1
             }
         }
+    }
+
+    // MARK: - Spacecraft simulation
+
+    func updateSpacecraft(dt: Double) {
+        guard Prefs.starfieldSpacecraft else {
+            spacecraft.removeAll()
+            return
+        }
+
+        let now = CACurrentMediaTime()
+        let sessionElapsed = now - viewStartTime
+
+        // Drift existing ships; remove once they've fully exited the screen.
+        let dtF = CGFloat(dt)
+        for i in 0..<spacecraft.count {
+            spacecraft[i].x += spacecraft[i].velocityX * dtF
+            spacecraft[i].y += spacecraft[i].velocityY * dtF
+        }
+        spacecraft.removeAll { ship in
+            let margin = ship.type.halfWidth + 40
+            return ship.x < -margin || ship.x > bounds.width + margin ||
+                   ship.y < -margin || ship.y > bounds.height + margin
+        }
+
+        // Spawn rules (keeps them rare and magical):
+        //  • Min 90 seconds after playback starts
+        //  • Max 4 spacecraft per session
+        //  • Min 3 minutes between spawns
+        //  • Only spawn if no spacecraft are currently on screen
+        //  • Random 0.3% chance per tick when eligible
+        let eligibleByTime = sessionElapsed >= 90
+        let eligibleByCount = spacecraftSpawnedThisSession < 4
+        let eligibleByCooldown = (lastSpacecraftTime == 0) || (now - lastSpacecraftTime >= 180)
+        let eligibleByActive = spacecraft.isEmpty
+        if eligibleByTime && eligibleByCount && eligibleByCooldown && eligibleByActive {
+            if Double.random(in: 0...1) < 0.003 {
+                spawnSpacecraft(now: now)
+            }
+        }
+    }
+
+    /// Spawn a random spacecraft from an edge heading across. Also used by
+    /// the debug menu action for on-demand testing.
+    func spawnSpacecraft(now: CFTimeInterval) {
+        let type = SpacecraftType.allCases.randomElement()!
+        let hw = type.halfWidth
+
+        // Pick a random horizontal direction (left→right or right→left).
+        let rightward = Bool.random()
+        let startX: CGFloat = rightward ? -hw - 20 : bounds.width + hw + 20
+        let startY = CGFloat.random(in: bounds.height * 0.15...bounds.height * 0.85)
+        let baseSpeed: CGFloat = CGFloat.random(in: 18...32)  // px/sec — slow, mysterious
+        let vx = rightward ? baseSpeed : -baseSpeed
+        let vy = CGFloat.random(in: -4...4)                    // very slight drift
+
+        spacecraft.append(Spacecraft(
+            type: type,
+            x: startX,
+            y: startY,
+            velocityX: vx,
+            velocityY: vy,
+            flipped: !rightward    // default ship orientation faces right
+        ))
+        lastSpacecraftTime = now
+        spacecraftSpawnedThisSession += 1
+    }
+
+    // MARK: - Spacecraft rendering (pure CGContext silhouettes)
+
+    /// Dark silhouette color used for most ship bodies (with tint rim).
+    private static let shipBodyColor = NSColor(red: 0.20, green: 0.22, blue: 0.28, alpha: 0.92)
+    private static let shipRimColor  = NSColor(red: 0.70, green: 0.78, blue: 0.95, alpha: 0.45)
+    private static let shipAccentColor = NSColor(red: 0.55, green: 0.62, blue: 0.78, alpha: 0.70)
+
+    func drawSpacecraftSilhouette(_ ship: Spacecraft, context: CGContext) {
+        context.saveGState()
+        context.translateBy(x: ship.x, y: ship.y)
+        if ship.flipped {
+            context.scaleBy(x: -1, y: 1)
+        }
+
+        context.setFillColor(StarfieldWarpView.shipBodyColor.cgColor)
+        context.setStrokeColor(StarfieldWarpView.shipRimColor.cgColor)
+        context.setLineWidth(0.8)
+
+        switch ship.type {
+        case .falcon:     drawFalcon(context: context)
+        case .enterprise: drawEnterprise(context: context)
+        case .tardis:     drawTardis(context: context)
+        case .serenity:   drawSerenity(context: context)
+        case .ufo:        drawUFO(context: context)
+        }
+
+        context.restoreGState()
+    }
+
+    /// Millennium Falcon — saucer body with forward mandibles + cockpit dome.
+    /// Drawn at origin (0,0), facing right.
+    private func drawFalcon(context: CGContext) {
+        let saucer = CGRect(x: -28, y: -8, width: 56, height: 16)
+        context.fillEllipse(in: saucer)
+        context.strokeEllipse(in: saucer)
+
+        // Forward mandibles (two small rects sticking out front/right)
+        context.fill(CGRect(x: 24, y: -5, width: 10, height: 2.5))
+        context.fill(CGRect(x: 24, y: 2.5, width: 10, height: 2.5))
+
+        // Cockpit dome (lighter accent on top-right of saucer)
+        context.setFillColor(StarfieldWarpView.shipAccentColor.cgColor)
+        context.fillEllipse(in: CGRect(x: 6, y: 4, width: 8, height: 6))
+    }
+
+    /// USS Enterprise NCC-1701 — saucer on top, two long horizontal nacelles below.
+    private func drawEnterprise(context: CGContext) {
+        // Saucer section
+        let saucer = CGRect(x: -18, y: 4, width: 36, height: 9)
+        context.fillEllipse(in: saucer)
+        context.strokeEllipse(in: saucer)
+
+        // Engineering hull
+        let hull = CGRect(x: -8, y: -2, width: 22, height: 5)
+        context.fillEllipse(in: hull)
+
+        // Two warp nacelles (long thin bars below the hull)
+        context.fill(CGRect(x: -30, y: -8, width: 50, height: 2.5))
+        context.fill(CGRect(x: -30, y: -13, width: 50, height: 2.5))
+
+        // Nacelle rim highlights
+        context.stroke(CGRect(x: -30, y: -8, width: 50, height: 2.5))
+        context.stroke(CGRect(x: -30, y: -13, width: 50, height: 2.5))
+    }
+
+    /// TARDIS — tall blue police box with a light on top.
+    private func drawTardis(context: CGContext) {
+        // Main box body — distinctive blue tint instead of neutral gray
+        context.setFillColor(NSColor(red: 0.15, green: 0.25, blue: 0.50, alpha: 0.95).cgColor)
+        context.fill(CGRect(x: -10, y: -14, width: 20, height: 26))
+        context.stroke(CGRect(x: -10, y: -14, width: 20, height: 26))
+
+        // Roof overhang (slightly wider)
+        context.fill(CGRect(x: -12, y: 11, width: 24, height: 2.5))
+
+        // Light on top (bright yellow accent)
+        context.setFillColor(NSColor(red: 1.0, green: 0.95, blue: 0.6, alpha: 0.85).cgColor)
+        context.fill(CGRect(x: -2, y: 14, width: 4, height: 3))
+
+        // Window middle line highlight
+        context.setStrokeColor(NSColor(red: 0.6, green: 0.75, blue: 1.0, alpha: 0.5).cgColor)
+        context.setLineWidth(0.6)
+        context.move(to: CGPoint(x: -8, y: 3))
+        context.addLine(to: CGPoint(x: 8, y: 3))
+        context.strokePath()
+    }
+
+    /// Serenity (Firefly) — elongated hull with engine pods at the back, nose cone forward.
+    private func drawSerenity(context: CGContext) {
+        // Central hull
+        let hull = CGRect(x: -28, y: -5, width: 50, height: 10)
+        context.fillEllipse(in: hull)
+        context.strokeEllipse(in: hull)
+
+        // Nose cone pointing forward (right)
+        let nose = CGMutablePath()
+        nose.move(to: CGPoint(x: 22, y: 0))
+        nose.addLine(to: CGPoint(x: 32, y: 3))
+        nose.addLine(to: CGPoint(x: 32, y: -3))
+        nose.closeSubpath()
+        context.addPath(nose)
+        context.fillPath()
+
+        // Rear engine pods (two circles at the back/left)
+        context.fillEllipse(in: CGRect(x: -34, y: 3, width: 10, height: 10))
+        context.fillEllipse(in: CGRect(x: -34, y: -13, width: 10, height: 10))
+
+        // Engine glow accents (warm orange — Firefly is famous for its glowing engines)
+        context.setFillColor(NSColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 0.75).cgColor)
+        context.fillEllipse(in: CGRect(x: -32, y: 5, width: 6, height: 6))
+        context.fillEllipse(in: CGRect(x: -32, y: -11, width: 6, height: 6))
+    }
+
+    /// Classic UFO flying saucer — flat disc, dome on top, glowing lights underneath.
+    private func drawUFO(context: CGContext) {
+        // Wide flat disc (main body)
+        let disc = CGRect(x: -28, y: -4, width: 56, height: 8)
+        context.fillEllipse(in: disc)
+        context.strokeEllipse(in: disc)
+
+        // Dome on top (filled half-circle via ellipse clipped to upper half)
+        context.saveGState()
+        context.clip(to: CGRect(x: -12, y: 0, width: 24, height: 12))
+        context.fillEllipse(in: CGRect(x: -10, y: -4, width: 20, height: 18))
+        context.restoreGState()
+
+        // Dome highlight
+        context.setFillColor(StarfieldWarpView.shipAccentColor.cgColor)
+        context.fillEllipse(in: CGRect(x: -6, y: 6, width: 4, height: 3))
+
+        // Three glowing lights on the underside
+        context.setFillColor(NSColor(red: 0.3, green: 1.0, blue: 0.5, alpha: 0.85).cgColor)
+        context.fillEllipse(in: CGRect(x: -12, y: -7, width: 4, height: 4))
+        context.fillEllipse(in: CGRect(x: -2, y: -7, width: 4, height: 4))
+        context.fillEllipse(in: CGRect(x: 8, y: -7, width: 4, height: 4))
     }
 
     /// Start the dive-comet animation now (used by the random trigger AND the
@@ -982,6 +1237,17 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                         height: planet.moonRadius * 2
                     ))
                 }
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // SPACECRAFT SILHOUETTES 🛸 — rare sci-fi Easter eggs
+        // Drawn after planets (mid-distance objects) and before comets
+        // (so comet streaks pass in front of visiting ships).
+        // ──────────────────────────────────────────────
+        if Prefs.starfieldSpacecraft && !spacecraft.isEmpty {
+            for ship in spacecraft {
+                drawSpacecraftSilhouette(ship, context: context)
             }
         }
 

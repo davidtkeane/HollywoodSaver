@@ -636,6 +636,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         cometsItem.submenu = cometsMenu
         starfieldBackdropMenu.addItem(cometsItem)
 
+        // Spacecraft Easter egg submenu 🛸
+        let spacecraftItem = NSMenuItem(title: "Spacecraft 🛸", action: nil, keyEquivalent: "")
+        let spacecraftMenu = NSMenu()
+
+        let spacecraftToggle = NSMenuItem(title: "Show Spacecraft", action: #selector(toggleStarfieldSpacecraft), keyEquivalent: "")
+        spacecraftToggle.state = Prefs.starfieldSpacecraft ? .on : .off
+        spacecraftMenu.addItem(spacecraftToggle)
+
+        spacecraftMenu.addItem(NSMenuItem.separator())
+
+        // Info header (disabled)
+        let shipInfo = NSMenuItem(title: "Rare visitors: Falcon, Enterprise, TARDIS, Serenity, UFO", action: nil, keyEquivalent: "")
+        shipInfo.isEnabled = false
+        spacecraftMenu.addItem(shipInfo)
+
+        spacecraftMenu.addItem(NSMenuItem.separator())
+
+        // Debug trigger
+        let triggerSpacecraft = NSMenuItem(title: "🎬 Spawn Random Spacecraft Now", action: #selector(triggerStarfieldSpacecraftNow), keyEquivalent: "")
+        spacecraftMenu.addItem(triggerSpacecraft)
+
+        spacecraftItem.submenu = spacecraftMenu
+        starfieldBackdropMenu.addItem(spacecraftItem)
+
         starfieldBackdropItem.submenu = starfieldBackdropMenu
         starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
 
@@ -1652,6 +1676,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         for view in contentViews {
             if let starfield = view as? StarfieldWarpView {
                 starfield.triggerDiveComet(now: CACurrentMediaTime())
+            }
+        }
+    }
+
+    @objc func toggleStarfieldSpacecraft() {
+        Prefs.starfieldSpacecraft = !Prefs.starfieldSpacecraft
+    }
+
+    @objc func triggerStarfieldSpacecraftNow() {
+        // Debug: spawn a random spacecraft immediately on any active Starfield view.
+        for view in contentViews {
+            if let starfield = view as? StarfieldWarpView {
+                starfield.spawnSpacecraft(now: CACurrentMediaTime())
             }
         }
     }

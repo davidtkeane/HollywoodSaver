@@ -122,6 +122,11 @@ class Prefs {
         get { defaults.object(forKey: "starfieldDiveComet") != nil ? defaults.bool(forKey: "starfieldDiveComet") : true }
         set { defaults.set(newValue, forKey: "starfieldDiveComet") }
     }
+    /// Spacecraft silhouettes Easter egg — rare sci-fi ships. Default ON.
+    static var starfieldSpacecraft: Bool {
+        get { defaults.object(forKey: "starfieldSpacecraft") != nil ? defaults.bool(forKey: "starfieldSpacecraft") : true }
+        set { defaults.set(newValue, forKey: "starfieldSpacecraft") }
+    }
 
     // Rain Effects
     static var rainOverlayEnabled: Bool {
