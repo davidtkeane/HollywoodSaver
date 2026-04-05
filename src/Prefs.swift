@@ -87,6 +87,11 @@ class Prefs {
         get { defaults.object(forKey: "starfieldBackgroundStars") != nil ? defaults.bool(forKey: "starfieldBackgroundStars") : true }
         set { defaults.set(newValue, forKey: "starfieldBackgroundStars") }
     }
+    /// Backdrop Layer D — deep space radial gradient. Default ON.
+    static var starfieldGradient: Bool {
+        get { defaults.object(forKey: "starfieldGradient") != nil ? defaults.bool(forKey: "starfieldGradient") : true }
+        set { defaults.set(newValue, forKey: "starfieldGradient") }
+    }
 
     // Rain Effects
     static var rainOverlayEnabled: Bool {

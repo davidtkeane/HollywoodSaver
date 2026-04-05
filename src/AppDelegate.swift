@@ -574,6 +574,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bgStarsToggle.state = Prefs.starfieldBackgroundStars ? .on : .off
         starfieldBackdropMenu.addItem(bgStarsToggle)
 
+        let gradientToggle = NSMenuItem(title: "Deep Space Gradient", action: #selector(toggleStarfieldGradient), keyEquivalent: "")
+        gradientToggle.state = Prefs.starfieldGradient ? .on : .off
+        starfieldBackdropMenu.addItem(gradientToggle)
+
         starfieldBackdropItem.submenu = starfieldBackdropMenu
         starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
 
@@ -1554,6 +1558,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleStarfieldBackgroundStars() {
         Prefs.starfieldBackgroundStars = !Prefs.starfieldBackgroundStars
+    }
+
+    @objc func toggleStarfieldGradient() {
+        Prefs.starfieldGradient = !Prefs.starfieldGradient
     }
 
     // MARK: - Break Reminder

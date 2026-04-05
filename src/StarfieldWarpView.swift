@@ -219,8 +219,41 @@ class StarfieldWarpView: NSView, ScreensaverContent {
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        context.setFillColor(NSColor.black.cgColor)
-        context.fill(bounds)
+        // ──────────────────────────────────────────────
+        // BACKDROP LAYER D — Deep Space Gradient
+        // Very subtle radial gradient: pure black at center (warp vanishing
+        // point stays infinite) → deep purple-blue at edges (distant cosmic
+        // haze). When disabled, falls back to pure black fill.
+        // ──────────────────────────────────────────────
+        if Prefs.starfieldGradient {
+            let colors = [
+                NSColor.black.cgColor,
+                NSColor(red: 0.05, green: 0.04, blue: 0.12, alpha: 1).cgColor
+            ]
+            let locations: [CGFloat] = [0, 1]
+            if let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: colors as CFArray,
+                locations: locations
+            ) {
+                let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
+                let maxRadius = max(bounds.width, bounds.height) * 0.75
+                context.drawRadialGradient(
+                    gradient,
+                    startCenter: center,
+                    startRadius: 0,
+                    endCenter: center,
+                    endRadius: maxRadius,
+                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                )
+            } else {
+                context.setFillColor(NSColor.black.cgColor)
+                context.fill(bounds)
+            }
+        } else {
+            context.setFillColor(NSColor.black.cgColor)
+            context.fill(bounds)
+        }
 
         // ──────────────────────────────────────────────
         // BACKDROP LAYER A — Background stars (cosmic dust)
