@@ -1130,8 +1130,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
         menu.addItem(desktopItem)
 
-        // Contribute
+        // About
         menu.addItem(NSMenuItem.separator())
+        let aboutItem = NSMenuItem(title: "About HollywoodSaver…", action: #selector(showAbout), keyEquivalent: "")
+        menu.addItem(aboutItem)
+
+        // Contribute
         let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
         let contributeSubmenu = NSMenu(title: "Contribute")
         let coffeeItem = NSMenuItem(title: "☕  Buy Me a Coffee", action: #selector(openBuyMeACoffee), keyEquivalent: "")
@@ -1366,6 +1370,77 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openH3llcoin() {
         NSWorkspace.shared.open(URL(string: "https://h3llcoin.com/how-to-buy.html")!)
+    }
+
+    // MARK: - About
+
+    @objc func showAbout() {
+        let alert = NSAlert()
+        alert.messageText = "HollywoodSaver v\(AppDelegate.appVersion)"
+        alert.informativeText = """
+Video screensaver & live wallpaper engine for macOS
+
+━━━ CONTENT TYPES ━━━
+🎬  Videos & GIFs — drop into videos/ and gifs/
+🟢  Matrix Rain — built-in (6 themes, 3 speeds)
+🌌  Starfield Warp — built-in hyperspace effect
+     with 4 backdrop layers + planets + moons +
+     comets + spacecraft Easter eggs
+📸  Photo Slideshow — Ken Burns effect on your photos
+
+━━━ FEATURES ━━━
+• Screensaver + Ambient (live wallpaper) modes
+• Multi-screen (built-in, external, or all)
+• Break Reminder & Pomodoro timer
+• Floating Clock Overlay
+• Sleep Timer with resume-on-wake
+• Lock Screen (SHA-256 password)
+• Secure auto-update via GitHub Releases
+
+━━━ CREDITS ━━━
+Created by David Keane (IrishRanger 🎖️)
+Cybersecurity Master's student • NCI Dublin
+Built with Claude Code (Opus 4.6) — AIRanger
+
+━━━ LICENSE ━━━
+© 2026 David Keane — MIT License
+Free forever, open source
+
+github.com/davidtkeane/HollywoodSaver
+"""
+        alert.alertStyle = .informational
+
+        // Try to use the custom app icon if one exists next to the app.
+        if let iconPath = iconImagePath(), let icon = NSImage(contentsOfFile: iconPath) {
+            alert.icon = icon
+        }
+
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Open GitHub Repo")
+        alert.addButton(withTitle: "View Full README")
+
+        // Menu bar apps need explicit activation for dialogs to come to front.
+        NSApp.activate(ignoringOtherApps: true)
+
+        let response = alert.runModal()
+        switch response {
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.open(URL(string: "https://github.com/davidtkeane/HollywoodSaver")!)
+        case .alertThirdButtonReturn:
+            // Try the bundled ABOUT.md first, fall back to the on-disk docs/ABOUT.md.
+            if let bundled = Bundle.main.url(forResource: "ABOUT", withExtension: "md") {
+                NSWorkspace.shared.open(bundled)
+            } else {
+                let onDiskPath = (appFolder as NSString).appendingPathComponent("docs/ABOUT.md")
+                if FileManager.default.fileExists(atPath: onDiskPath) {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: onDiskPath))
+                } else {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/davidtkeane/HollywoodSaver/blob/main/docs/ABOUT.md")!)
+                }
+            }
+        default:
+            break
+        }
     }
 
     // MARK: - Version Checker
