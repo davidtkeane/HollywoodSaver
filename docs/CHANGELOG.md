@@ -2,6 +2,19 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [Unreleased]
+
+### Added
+- **🌌 Starfield Warp** — brand new built-in hyperspace effect! Inspired by Star Wars jumping to lightspeed. Stars stream outward from screen center in true 3D perspective projection, stretching into warp streaks as they approach the viewer. Works in Screensaver mode (fullscreen takeover) or Ambient mode (live wallpaper behind your windows), and across all screens / built-in / external just like Matrix Rain.
+  - **Speed:** Slow, Medium, Fast, **Lightspeed** ⚡
+  - **Color:** White, Blue, Amber, Rainbow 🌈
+  - **Density:** Light (200 stars), Medium (400 stars), Heavy (800 stars)
+  - New file: `src/StarfieldWarpView.swift` — uses `CVDisplayLink` for display-synced animation (handles 60Hz and 120Hz ProMotion). Sits alongside Matrix Rain as the app's second built-in effect.
+  - Sentinel-based integration: `##STARFIELD_WARP##` flows through the same code paths as Matrix Rain (auto-play on launch, screen selection, ambient/screensaver modes).
+- **✨ Starfield Backdrop: Background Stars (Layer A)** — cosmic dust! ~300 static twinkling stars fill the black void behind the warp streaks, so space feels inhabited instead of empty. Each star has its own random size (0.8–2.2 px), brightness, and twinkle phase so they pulse independently. ~12% are blue-tinted for cool color variety. Star count scales with screen area (150–600 range). New toggle: **Starfield Warp ▶ Settings ▶ Backdrop ▶ ✓ Background Stars** — on by default, flip live without restarting. First of four planned backdrop layers (Gradient, Galaxies, Nebulae coming next).
+
+---
+
 ## [5.0.0] - 2026-04-05 — Architecture Refactor
 
 > **Architecture release.** Same feature set as v4.8.0, now living in a

@@ -16,6 +16,7 @@ enum PlayMode {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let matrixRainSentinel = "##MATRIX_RAIN##"
+    static let starfieldWarpSentinel = "##STARFIELD_WARP##"
     static let appVersion = "5.0.0"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
@@ -171,9 +172,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Auto play on launch
         if Prefs.autoPlayEnabled, let filename = Prefs.lastMediaFilename {
             let mode: PlayMode = Prefs.lastPlayMode == "ambient" ? .ambient : .screensaver
-            if filename == AppDelegate.matrixRainSentinel {
+            if filename == AppDelegate.matrixRainSentinel || filename == AppDelegate.starfieldWarpSentinel {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.startPlaying(media: AppDelegate.matrixRainSentinel, on: NSScreen.screens, mode: mode)
+                    self.startPlaying(media: filename, on: NSScreen.screens, mode: mode)
                 }
             } else {
                 let path = (appFolder as NSString).appendingPathComponent(filename)
@@ -519,6 +520,73 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         matrixItem.submenu = matrixSubmenu
         menu.addItem(matrixItem)
+
+        // Starfield Warp - built-in hyperspace effect
+        let starfieldItem = NSMenuItem(title: "Starfield Warp", action: nil, keyEquivalent: "")
+        let starfieldSubmenu = NSMenu()
+
+        // Starfield settings submenu
+        let starfieldSettingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        let starfieldSettingsSubmenu = NSMenu()
+
+        // Speed
+        let starfieldSpeedMenu = NSMenu()
+        for s in StarfieldSpeed.allCases {
+            let item = NSMenuItem(title: s.rawValue, action: #selector(setStarfieldSpeed(_:)), keyEquivalent: "")
+            item.representedObject = s.rawValue as AnyObject
+            item.state = Prefs.starfieldSpeed == s.rawValue ? .on : .off
+            starfieldSpeedMenu.addItem(item)
+        }
+        let starfieldSpeedItem = NSMenuItem(title: "Speed", action: nil, keyEquivalent: "")
+        starfieldSpeedItem.submenu = starfieldSpeedMenu
+        starfieldSettingsSubmenu.addItem(starfieldSpeedItem)
+
+        // Color
+        let starfieldColorMenu = NSMenu()
+        for c in StarfieldColor.allCases {
+            let item = NSMenuItem(title: c.rawValue, action: #selector(setStarfieldColor(_:)), keyEquivalent: "")
+            item.representedObject = c.rawValue as AnyObject
+            item.state = Prefs.starfieldColor == c.rawValue ? .on : .off
+            starfieldColorMenu.addItem(item)
+        }
+        let starfieldColorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        starfieldColorItem.submenu = starfieldColorMenu
+        starfieldSettingsSubmenu.addItem(starfieldColorItem)
+
+        // Density
+        let starfieldDensityMenu = NSMenu()
+        for d in StarfieldDensity.allCases {
+            let item = NSMenuItem(title: d.rawValue, action: #selector(setStarfieldDensity(_:)), keyEquivalent: "")
+            item.representedObject = d.rawValue as AnyObject
+            item.state = Prefs.starfieldDensity == d.rawValue ? .on : .off
+            starfieldDensityMenu.addItem(item)
+        }
+        let starfieldDensityItem = NSMenuItem(title: "Density", action: nil, keyEquivalent: "")
+        starfieldDensityItem.submenu = starfieldDensityMenu
+        starfieldSettingsSubmenu.addItem(starfieldDensityItem)
+
+        // Backdrop — layered cosmic background (each layer toggleable)
+        starfieldSettingsSubmenu.addItem(NSMenuItem.separator())
+        let starfieldBackdropItem = NSMenuItem(title: "Backdrop", action: nil, keyEquivalent: "")
+        let starfieldBackdropMenu = NSMenu()
+
+        let bgStarsToggle = NSMenuItem(title: "Background Stars", action: #selector(toggleStarfieldBackgroundStars), keyEquivalent: "")
+        bgStarsToggle.state = Prefs.starfieldBackgroundStars ? .on : .off
+        starfieldBackdropMenu.addItem(bgStarsToggle)
+
+        starfieldBackdropItem.submenu = starfieldBackdropMenu
+        starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
+
+        starfieldSettingsItem.submenu = starfieldSettingsSubmenu
+        starfieldSubmenu.addItem(starfieldSettingsItem)
+
+        starfieldSubmenu.addItem(NSMenuItem.separator())
+
+        // Screen selection for Starfield Warp
+        addScreenItems(to: starfieldSubmenu, file: AppDelegate.starfieldWarpSentinel, builtIn: builtIn, externals: externals)
+
+        starfieldItem.submenu = starfieldSubmenu
+        menu.addItem(starfieldItem)
 
         // Break Reminder
         menu.addItem(NSMenuItem.separator())
@@ -1463,6 +1531,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startPlaying(media: AppDelegate.matrixRainSentinel, on: NSScreen.screens, mode: .screensaver)
     }
 
+    // MARK: - Starfield Warp settings actions
+
+    @objc func setStarfieldSpeed(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.starfieldSpeed = value
+    }
+
+    @objc func setStarfieldColor(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.starfieldColor = value
+    }
+
+    @objc func setStarfieldDensity(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        Prefs.starfieldDensity = value
+    }
+
+    @objc func playStarfieldWarpAllScreens() {
+        startPlaying(media: AppDelegate.starfieldWarpSentinel, on: NSScreen.screens, mode: .screensaver)
+    }
+
+    @objc func toggleStarfieldBackgroundStars() {
+        Prefs.starfieldBackgroundStars = !Prefs.starfieldBackgroundStars
+    }
+
     // MARK: - Break Reminder
 
     @objc func startBreakTimer(_ sender: NSMenuItem) {
@@ -2100,8 +2193,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if isPlaying { stopPlaying() }
 
         let isMatrixRain = (media == AppDelegate.matrixRainSentinel)
+        let isStarfieldWarp = (media == AppDelegate.starfieldWarpSentinel)
+        let isBuiltInEffect = isMatrixRain || isStarfieldWarp
 
-        if !isMatrixRain {
+        if !isBuiltInEffect {
             guard FileManager.default.fileExists(atPath: media) else {
                 let alert = NSAlert()
                 alert.messageText = "File Not Found"
@@ -2114,11 +2209,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentMode = mode
         currentMediaPath = media
-        nowPlayingName = isMatrixRain ? "Matrix Rain" : displayName(for: media)
+        if isMatrixRain {
+            nowPlayingName = "Matrix Rain"
+        } else if isStarfieldWarp {
+            nowPlayingName = "Starfield Warp"
+        } else {
+            nowPlayingName = displayName(for: media)
+        }
 
         // Save for auto play
-        if isMatrixRain {
-            Prefs.lastMediaFilename = AppDelegate.matrixRainSentinel
+        if isBuiltInEffect {
+            Prefs.lastMediaFilename = media   // sentinel string
         } else {
             Prefs.lastMediaFilename = (media as NSString).lastPathComponent
         }
@@ -2156,6 +2257,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let content: NSView & ScreensaverContent
             if isMatrixRain {
                 content = MatrixRainView(frame: screen.frame)
+            } else if isStarfieldWarp {
+                content = StarfieldWarpView(frame: screen.frame)
             } else if isGif(media) {
                 let url = URL(fileURLWithPath: media)
                 content = GifPlayerView(frame: screen.frame, gifURL: url)

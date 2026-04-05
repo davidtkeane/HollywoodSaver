@@ -69,6 +69,25 @@ class Prefs {
         set { defaults.set(newValue, forKey: "matrixTrailLength") }
     }
 
+    // Starfield Warp preferences
+    static var starfieldSpeed: String {
+        get { defaults.string(forKey: "starfieldSpeed") ?? "Medium" }
+        set { defaults.set(newValue, forKey: "starfieldSpeed") }
+    }
+    static var starfieldColor: String {
+        get { defaults.string(forKey: "starfieldColor") ?? "White" }
+        set { defaults.set(newValue, forKey: "starfieldColor") }
+    }
+    static var starfieldDensity: String {
+        get { defaults.string(forKey: "starfieldDensity") ?? "Medium" }
+        set { defaults.set(newValue, forKey: "starfieldDensity") }
+    }
+    /// Backdrop Layer A — cosmic dust/background stars. Default ON.
+    static var starfieldBackgroundStars: Bool {
+        get { defaults.object(forKey: "starfieldBackgroundStars") != nil ? defaults.bool(forKey: "starfieldBackgroundStars") : true }
+        set { defaults.set(newValue, forKey: "starfieldBackgroundStars") }
+    }
+
     // Rain Effects
     static var rainOverlayEnabled: Bool {
         get { defaults.bool(forKey: "rainOverlayEnabled") }
