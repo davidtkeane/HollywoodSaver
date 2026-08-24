@@ -14,7 +14,7 @@ APP_DIR="$SCRIPT_DIR/HollywoodSaver.app"
 # Read version from Swift source (single source of truth)
 VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/src/AppDelegate.swift" | grep -o '"[^"]*"' | tr -d '"')
 if [ -z "$VERSION" ]; then
-    VERSION="5.0.1"
+    VERSION="5.0.2"
     echo -e "${YELLOW}Warning: Could not read version from Swift source, using default ${VERSION}${NC}"
 fi
 

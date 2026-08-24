@@ -59,6 +59,7 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 
 | Version | Highlights |
 |---------|-----------|
+| **v5.0.2** | **Multi-Monitor Experience & Input Isolation** — Multi-monitor status bar icons mirrored on all displays, intelligent screensaver input isolation allowing work on laptop while playing on external screens. |
 | **v5.0.1** | **Feature & Performance Upgrade** — Added Metal GPU Hyperspace (<1% CPU), Interactive HTML5 Web Wallpapers, Per-Monitor media assignment, Sequential video playlists, Low Power battery savings, 12h/24h clock toggle, UNUserNotificationCenter notifications, and full modular 26-source file architecture (6,521 lines in `src/`). |
 | **v5.0.0** | **Architecture Refactor** — 3,599-line monolith split into modular source files in `src/`, with `docs/`/`images/`/`videos/`/`gifs/`/`photos/` folders. |
 | **v4.8.0** | Floating Clock Overlay (6 colors, 3 sizes, 4 corners, date toggle, screen selection) — last release before modular refactor |

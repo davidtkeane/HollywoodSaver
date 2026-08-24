@@ -219,16 +219,23 @@ extension AppDelegate {
             contentViews.append(content)
         }
 
-        let hasScreensaver = screensaverWindows.contains { $0.screenSessionMode == .screensaver }
-        if hasScreensaver {
-            NSApp.activate(ignoringOtherApps: true)
-            NSCursor.hide()
+        let screensaverWins = screensaverWindows.filter { $0.screenSessionMode == .screensaver }
+        let allScreensCovered = screensaverWins.count >= max(1, NSScreen.screens.count)
 
+        if !screensaverWins.isEmpty {
+            if allScreensCovered {
+                NSApp.activate(ignoringOtherApps: true)
+                NSCursor.hide()
+            }
+
+            let activeFrames = screensaverWins.map { $0.frame }
             if inputMonitor == nil {
-                inputMonitor = InputMonitor { [weak self] in
+                inputMonitor = InputMonitor(activeFrames: activeFrames) { [weak self] in
                     self?.stopPlaying()
                 }
                 inputMonitor?.start()
+            } else {
+                inputMonitor?.updateActiveFrames(activeFrames)
             }
         }
 
@@ -252,11 +259,14 @@ extension AppDelegate {
         if screensaverWindows.isEmpty {
             stopPlaying()
         } else {
-            let hasScreensaver = screensaverWindows.contains { $0.screenSessionMode == .screensaver }
-            if !hasScreensaver {
+            let screensaverWins = screensaverWindows.filter { $0.screenSessionMode == .screensaver }
+            if screensaverWins.isEmpty {
                 NSCursor.unhide()
                 inputMonitor?.stop()
                 inputMonitor = nil
+            } else {
+                let activeFrames = screensaverWins.map { $0.frame }
+                inputMonitor?.updateActiveFrames(activeFrames)
             }
             let hasAmbient = screensaverWindows.contains { $0.screenSessionMode == .ambient }
             if !hasAmbient {

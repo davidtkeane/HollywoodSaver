@@ -47,7 +47,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
-> **v5.0.1 — Architecture & Feature Upgrade Release.** Clean modular architecture (26 source files in `src/`, 6,521 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Sequential video playlists, and Low Power battery savings. Every feature remains 100% free and open-source.
+> **v5.0.2 — Architecture & Multi-Monitor Upgrade Release.** Clean modular architecture (26 source files in `src/`, 6,521 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Multi-Monitor status bar icons, Input Isolation, and Low Power battery savings. Every feature remains 100% free and open-source.
 
 📖 **More docs:** [Full feature list & version history](docs/ABOUT.md) · [Complete changelog](docs/CHANGELOG.md)
 
@@ -70,13 +70,9 @@ bash build.sh
 
 ### Where is the icon?
 
-HollywoodSaver lives in the menu bar (the top bar of your screen, next to Wi-Fi, battery, etc.). The icon location depends on your Mac:
+HollywoodSaver lives in the menu bar (the top-right bar of your screen, next to Wi-Fi, battery, Spotlight, etc.).
 
-| Mac | Icon Location |
-|-----|---------------|
-| **M1 Macs** | Appears on the built-in screen menu bar AND external screen menu bar |
-| **M3/M4 Macs** | If an external monitor is connected, the icon may **only** appear on the external screen's menu bar |
-| **No external monitor** | Always appears on your main screen's menu bar |
+In **v5.0.1+**, the HollywoodSaver icon appears on **all connected screens simultaneously** (both your built-in display and any connected external monitors). You can click the icon from whichever screen you are actively working on.
 
 If you don't see it, check the menu bar on your **external monitor**.
 

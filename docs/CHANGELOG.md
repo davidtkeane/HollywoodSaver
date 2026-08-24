@@ -2,6 +2,18 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [5.0.2] - 2026-08-24 — Multi-Monitor Experience & Input Isolation
+
+### Added
+- **📍 True Multi-Monitor Status Bar Icons** — automatically instantiates and synchronizes `NSStatusItem`s on all connected displays (both built-in and external monitors). Status bar icons dynamically scale and rebuild on monitor hotplug/rearrangement events (`didChangeScreenParametersNotification`).
+- **🖱️ Multi-Screen Screensaver Input Isolation** — when running a screensaver on an external display (or built-in screen), mouse movement, clicks, and typing on other working displays no longer terminate playback. Cursor is kept visible on working screens for seamless productivity. Moving mouse into the screensaver screen, clicking it, or pressing Escape dismisses playback cleanly.
+
+### Fixed & Refined
+- **Menu Bar Visibility on Apple Silicon** — resolved menu bar icon placement so HollywoodSaver appears in the menu bar of all connected displays.
+- **Global Cursor Lock Prevention** — prevented global `NSCursor.hide()` when screensavers run on single displays in multi-monitor setups.
+
+---
+
 ## [5.0.1] - 2026-08-24 — Feature & Performance Upgrade
 
 ### Added
@@ -12,7 +24,8 @@ All notable changes to HollywoodSaver are documented here.
 - **🔋 Battery Saver (Low Power 30fps) Mode** — automatically detects macOS Low Power Mode on battery power and throttles Starfield Warp frame pacing to 30fps to maximize battery life.
 - **⏰ 12h/24h Clock Customization & Seconds Toggle** — added "24-Hour Time" toggle (`14:35:10` vs `2:35:10 PM`) and "Show Seconds" toggle (`14:35:10` vs `14:35`) with responsive HUD sizing.
 - **🌌 Starfield Warp** — built-in hyperspace effect with 4 cosmic backdrop layers (Layer A background stars, Layer B distant rotating galaxies, Layer C drifting nebula color clouds, Layer D deep space gradient), planets with orbiting moons, passing comets, screen-dive comets 🎯, and rare spacecraft silhouettes 🛸 (`src/StarfieldWarpView.swift`).
-- **📸 Photo Slideshow (Ken Burns Effect)** — built-in cinematic photo slideshow with smooth crossfading from `photos/` folder (`src/PhotoSlideshowView.swift`).
+- **📍 Multi-Monitor Status Bar Icons** — automatically creates an `NSStatusItem` on every connected display (both built-in and external monitors). When screens change or external monitors are plugged/unplugged, status items are dynamically reconciled across all menu bars.
+- **🖱️ Multi-Screen Input Isolation** — when playing a screensaver on one monitor (e.g. external display), mouse movements, clicks, and keystrokes on your other monitor (e.g. built-in display) will **no longer interrupt or stop playback**. You can freely code, browse, and work on one screen while the other screen plays your video or effect uninterrupted. Only moving the mouse onto the screensaver screen, clicking it, or pressing Escape will dismiss it.
 - **☑️ Stay-open toggles for backdrop layers** — reusable `ToggleMenuItemView` (`src/ToggleMenuItemView.swift`) keeping menus open when configuring visual layers.
 
 ### Changed & Refactored
