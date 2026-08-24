@@ -17,11 +17,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     static let starfieldWarpSentinel = "##STARFIELD_WARP##"
     static let photoSlideshowSentinel = "##PHOTO_SLIDESHOW##"
     static let metalHyperspaceSentinel = "##METAL_HYPERSPACE##"
-    static let appVersion = "5.0.2"
+    static let appVersion = "5.0.3"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
-    var statusItems: [NSStatusItem] = []
-    var statusItem: NSStatusItem? { statusItems.first }
+    var statusItem: NSStatusItem!
     var screensaverWindows: [ScreensaverWindow] = []
     var contentViews: [ScreensaverContent] = []
     var inputMonitor: InputMonitor?
@@ -187,35 +186,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             .capitalized
     }
 
-    func setupStatusItems() {
-        for item in statusItems {
-            NSStatusBar.system.removeStatusItem(item)
-        }
-        statusItems.removeAll()
-
-        let count = max(1, NSScreen.screens.count)
-        for _ in 0..<count {
-            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-            if let button = item.button {
-                if let iconPath = iconImagePath(), let image = NSImage(contentsOfFile: iconPath) {
-                    image.isTemplate = true
-                    image.size = NSSize(width: 18, height: 18)
-                    button.image = image
-                } else {
-                    let image = NSImage(systemSymbolName: "play.rectangle.fill",
-                                        accessibilityDescription: "HollywoodSaver")
-                    image?.isTemplate = true
-                    button.image = image
-                }
-            }
-            item.menu = buildMenu()
-            statusItems.append(item)
-        }
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(Prefs.showDockIcon ? .regular : .accessory)
-        setupStatusItems()
+
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem.button {
+            if let iconPath = iconImagePath(), let image = NSImage(contentsOfFile: iconPath) {
+                image.isTemplate = true
+                image.size = NSSize(width: 18, height: 18)
+                button.image = image
+            } else {
+                let image = NSImage(systemSymbolName: "play.rectangle.fill",
+                                    accessibilityDescription: "HollywoodSaver")
+                image?.isTemplate = true
+                button.image = image
+            }
+        }
+
+        statusItem.menu = buildMenu()
 
         // Check for updates in background (and every hour after)
         checkForUpdates(forceRefresh: true)
@@ -278,7 +266,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     @objc func handleScreenParametersChanged() {
-        setupStatusItems()
         if !clockWindows.isEmpty {
             restartClockIfActive()
         }
@@ -327,18 +314,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func setMenuBarIcon(symbolName: String) {
-        for item in statusItems {
-            guard let button = item.button else { continue }
-            if let iconPath = iconImagePath(), let image = NSImage(contentsOfFile: iconPath) {
-                image.isTemplate = true
-                image.size = NSSize(width: 18, height: 18)
-                button.image = image
-            } else {
-                let image = NSImage(systemSymbolName: symbolName,
-                                    accessibilityDescription: "HollywoodSaver")
-                image?.isTemplate = true
-                button.image = image
-            }
+        guard let button = statusItem.button else { return }
+        if let iconPath = iconImagePath(), let image = NSImage(contentsOfFile: iconPath) {
+            image.isTemplate = true
+            image.size = NSSize(width: 18, height: 18)
+            button.image = image
+        } else {
+            let image = NSImage(systemSymbolName: symbolName,
+                                accessibilityDescription: "HollywoodSaver")
+            image?.isTemplate = true
+            button.image = image
         }
     }
 

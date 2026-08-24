@@ -47,9 +47,9 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
-> **v5.0.2 — Architecture & Multi-Monitor Upgrade Release.** Clean modular architecture (26 source files in `src/`, 6,521 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Multi-Monitor status bar icons, Input Isolation, and Low Power battery savings. Every feature remains 100% free and open-source.
+> **v5.0.3 — Architecture & Multi-Monitor Release.** Clean modular architecture (26 source files in `src/`, 6,521 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Multi-Screen Input Isolation, and Low Power battery savings. Every feature remains 100% free and open-source.
 
-📖 **More docs:** [Full feature list & version history](docs/ABOUT.md) · [Complete changelog](docs/CHANGELOG.md)
+📖 **More docs:** [Multi-Monitor Architecture Guide](docs/MULTI_MONITOR_GUIDE.md) · [Full feature list & version history](docs/ABOUT.md) · [Complete changelog](docs/CHANGELOG.md)
 
 ## Quick Start
 

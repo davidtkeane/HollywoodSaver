@@ -2,14 +2,20 @@
 
 All notable changes to HollywoodSaver are documented here.
 
-## [5.0.2] - 2026-08-24 — Multi-Monitor Experience & Input Isolation
+## [5.0.3] - 2026-08-24 — Clean Menu Bar & Technical Documentation
+
+### Changed & Refined
+- **✨ Clean Single Status Bar Item** — restored single `NSStatusItem` instance in accordance with Apple HIG, eliminating duplicate adjacent icons on external displays.
+- **📚 Multi-Monitor Technical Documentation** — added [`docs/MULTI_MONITOR_GUIDE.md`](MULTI_MONITOR_GUIDE.md) providing comprehensive architecture documentation on macOS AppKit status bar behavior, input isolation algorithms, per-screen playback pipelines, and auto-update verification.
+
+---
+
+## [5.0.2] - 2026-08-24 — Multi-Screen Input Isolation
 
 ### Added
-- **📍 True Multi-Monitor Status Bar Icons** — automatically instantiates and synchronizes `NSStatusItem`s on all connected displays (both built-in and external monitors). Status bar icons dynamically scale and rebuild on monitor hotplug/rearrangement events (`didChangeScreenParametersNotification`).
 - **🖱️ Multi-Screen Screensaver Input Isolation** — when running a screensaver on an external display (or built-in screen), mouse movement, clicks, and typing on other working displays no longer terminate playback. Cursor is kept visible on working screens for seamless productivity. Moving mouse into the screensaver screen, clicking it, or pressing Escape dismisses playback cleanly.
 
 ### Fixed & Refined
-- **Menu Bar Visibility on Apple Silicon** — resolved menu bar icon placement so HollywoodSaver appears in the menu bar of all connected displays.
 - **Global Cursor Lock Prevention** — prevented global `NSCursor.hide()` when screensavers run on single displays in multi-monitor setups.
 
 ---
