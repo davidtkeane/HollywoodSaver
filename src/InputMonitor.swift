@@ -7,7 +7,9 @@ class InputMonitor {
     var globalMonitor: Any?
     var localMonitor: Any?
     var initialMouseLocation: NSPoint?
-    let movementThreshold: CGFloat = 5.0
+    var startTime: TimeInterval = 0
+    let initialGracePeriod: TimeInterval = 0.5
+    let movementThreshold: CGFloat = 20.0
     var isDismissing = false
 
     init(onDismiss: @escaping () -> Void) {
@@ -16,6 +18,7 @@ class InputMonitor {
 
     func start() {
         isDismissing = false
+        startTime = CACurrentMediaTime()
         initialMouseLocation = NSEvent.mouseLocation
 
         let mask: NSEvent.EventTypeMask = [
@@ -44,11 +47,16 @@ class InputMonitor {
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             dismiss()
         case .mouseMoved, .scrollWheel:
+            let now = CACurrentMediaTime()
+            if now - startTime < initialGracePeriod {
+                initialMouseLocation = NSEvent.mouseLocation
+                return
+            }
             guard let initial = initialMouseLocation else { return }
             let current = NSEvent.mouseLocation
             let dx = abs(current.x - initial.x)
             let dy = abs(current.y - initial.y)
-            if dx > movementThreshold || dy > movementThreshold {
+            if hypot(dx, dy) > movementThreshold {
                 dismiss()
             }
         default:

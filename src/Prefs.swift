@@ -34,6 +34,22 @@ class Prefs {
         get { defaults.bool(forKey: "autoPlayEnabled") }
         set { defaults.set(newValue, forKey: "autoPlayEnabled") }
     }
+    static var playlistMode: Bool {
+        get { defaults.object(forKey: "playlistMode") != nil ? defaults.bool(forKey: "playlistMode") : false }
+        set { defaults.set(newValue, forKey: "playlistMode") }
+    }
+    static var lowPowerModeEnabled: Bool {
+        get { defaults.object(forKey: "lowPowerModeEnabled") != nil ? defaults.bool(forKey: "lowPowerModeEnabled") : true }
+        set { defaults.set(newValue, forKey: "lowPowerModeEnabled") }
+    }
+    static var clockFormat24h: Bool {
+        get { defaults.bool(forKey: "clockFormat24h") }
+        set { defaults.set(newValue, forKey: "clockFormat24h") }
+    }
+    static var clockShowSeconds: Bool {
+        get { defaults.object(forKey: "clockShowSeconds") != nil ? defaults.bool(forKey: "clockShowSeconds") : true }
+        set { defaults.set(newValue, forKey: "clockShowSeconds") }
+    }
     static var lastMediaFilename: String? {
         get { defaults.string(forKey: "lastMediaFilename") }
         set { defaults.set(newValue, forKey: "lastMediaFilename") }

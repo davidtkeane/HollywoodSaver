@@ -117,8 +117,9 @@ class MatrixRainView: NSView, ScreensaverContent {
             view.lastTimestamp = timestamp
 
             DispatchQueue.main.async {
-                view.updateState(dt: dt)
-                view.setNeedsDisplay(view.bounds)
+                if view.updateState(dt: dt) {
+                    view.setNeedsDisplay(view.bounds)
+                }
             }
             return kCVReturnSuccess
         }
@@ -135,10 +136,11 @@ class MatrixRainView: NSView, ScreensaverContent {
         }
     }
 
-    func updateState(dt: Double) {
+    @discardableResult
+    func updateState(dt: Double) -> Bool {
         elapsed += dt
         let interval = 1.0 / speed.updatesPerSecond
-        guard elapsed >= interval else { return }
+        guard elapsed >= interval else { return false }
         elapsed -= interval
         flickerCounter += 1
 
@@ -168,6 +170,7 @@ class MatrixRainView: NSView, ScreensaverContent {
                 }
             }
         }
+        return true
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -177,11 +180,14 @@ class MatrixRainView: NSView, ScreensaverContent {
         context.fill(bounds)
 
         let font = CTFontCreateWithName("Menlo" as CFString, fontSize.pointSize, nil)
+        let isRainbow = (colorTheme == .rainbow)
+        let primary = colorTheme.primaryColor
 
         for (colIndex, column) in columns.enumerated() where column.active && column.delay <= 0 {
             let x = CGFloat(colIndex) * cellWidth
+            let colLength = column.length
 
-            for rowOffset in 0...column.length {
+            for rowOffset in 0...colLength {
                 let row = column.headRow - rowOffset
                 guard row >= 0, row < numRows else { continue }
 
@@ -191,11 +197,11 @@ class MatrixRainView: NSView, ScreensaverContent {
                 if rowOffset == 0 {
                     color = NSColor.white
                 } else {
-                    let alpha = CGFloat(max(0, 1.0 - Double(rowOffset) / Double(column.length)))
-                    if colorTheme == .rainbow {
+                    let alpha = CGFloat(max(0, 1.0 - Double(rowOffset) / Double(colLength)))
+                    if isRainbow {
                         color = NSColor(hue: column.hue, saturation: 1, brightness: 1, alpha: alpha)
                     } else {
-                        color = colorTheme.primaryColor.withAlphaComponent(alpha)
+                        color = primary.withAlphaComponent(alpha)
                     }
                 }
 

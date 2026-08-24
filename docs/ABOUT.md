@@ -3,13 +3,13 @@
 **Version:** 5.0.0 (Architecture Refactor — same feature set, modular codebase)
 **Platform:** macOS 15+ (Apple Silicon — M1/M2/M3/M4)
 **License:** MIT
-**Source:** 14 Swift files in `src/` (~3,600 lines total), compiled with `swiftc` — no Xcode project
+**Source:** 17 Swift files in `src/` (~5,750 lines total), compiled with `swiftc` — no Xcode project
 
 ---
 
 ## What is HollywoodSaver?
 
-HollywoodSaver is a native macOS menu bar app that turns your Mac into a video screensaver and **live wallpaper engine**. Play looping videos, GIFs, and built-in effects fullscreen — or run them behind your windows as a living desktop. Built with pure Swift across 14 modular files, no Xcode project needed.
+HollywoodSaver is a native macOS menu bar app that turns your Mac into a video screensaver and **live wallpaper engine**. Play looping videos, GIFs, and built-in effects fullscreen — or run them behind your windows as a living desktop. Built with pure Swift across 17 modular files, no Xcode project needed.
 
 ---
 
@@ -21,11 +21,18 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 | **Live Wallpaper Mode** | Ambient mode + reduced opacity = animated wallpaper behind all your windows |
 | **Ambient Mode** | Play on any screen while you keep working — built-in, external, or all |
 | **Multi-Screen** | Built-in, external, all screens — your choice |
+| **Per-Monitor Setup** | Assign different media, effects, or web wallpapers to individual screens independently |
 | **Video + GIF** | Supports `.mp4`, `.mov`, `.m4v`, and `.gif` files |
 | **Matrix Rain** | Built-in Matrix digital rain effect — no video file needed |
 | **Matrix Settings** | Color theme, speed, characters, density, font size, trail length |
+| **Starfield Warp** | Built-in hyperspace warp effect with 4 cosmic backdrop layers, planets, moons, comets, and spacecraft Easter eggs |
+| **GPU Hyperspace** | Built-in Metal fragment/compute shader running at 60/120 FPS with <1% CPU overhead |
+| **Web Wallpapers** | Interactive live HTML5 canvas & WebGL wallpapers from the `web/` folder via `WKWebView` |
+| **Photo Slideshow** | Built-in Ken Burns cinematic photo slideshow with smooth crossfading from `photos/` folder |
+| **Sequential Playlist** | Auto-advance through videos in sequence when playback ends, with seamless looping |
+| **Battery Saver Mode** | Automatic 30fps throttling when macOS Low Power Mode is active on battery |
 | **Rain Effects** | Two independent Matrix Rain modes — behind windows (wallpaper) and over windows (transparent overlay). Both fully click-through, with separate opacity sliders |
-| **Floating Clock** | Always-on-top clock overlay — 6 colors, 3 sizes, 4 corner positions, optional date, screen selection, auto-restore |
+| **Floating Clock** | Always-on-top clock overlay — 12h/24h toggle, seconds toggle, 6 colors, 3 sizes, 4 corner positions, optional date, screen selection, auto-restore |
 | **Break Reminder** | Countdown timer (60/45/30/15 min or custom) with fullscreen break screen overlay |
 | **Floating Countdown** | On-screen countdown widget — choose screen, corner, color, and size |
 | **Pomodoro Mode** | Auto-cycling work/break timer with configurable durations |
@@ -43,6 +50,7 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 | **Auto Play** | Automatically start playing when the app launches |
 | **Launch at Login** | Start the app every time you log in |
 | **Custom Icon** | Drop a `ranger.png` next to the app for a custom menu bar icon |
+| **Organized Folders** | `videos/`, `gifs/`, `photos/`, and `web/` subfolders keep your media tidy |
 | **Portable** | Move the whole folder anywhere — the app finds its videos |
 
 ---
@@ -51,7 +59,8 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 
 | Version | Highlights |
 |---------|-----------|
-| **v5.0.0** | **Architecture Refactor** — 3,599-line monolith split into 14 files in `src/`, new `docs/`/`images/`/`videos/`/`gifs/` folders, DRY refactoring (−75 lines), menu bar icon fix. Zero feature changes. |
+| **v5.0.1** | **Feature & Performance Upgrade** — Added Metal GPU Hyperspace (<1% CPU), Interactive HTML5 Web Wallpapers, Per-Monitor media assignment, Sequential video playlists, Low Power battery savings, 12h/24h clock toggle, UNUserNotificationCenter notifications, and full modular 26-source file architecture (6,521 lines in `src/`). |
+| **v5.0.0** | **Architecture Refactor** — 3,599-line monolith split into modular source files in `src/`, with `docs/`/`images/`/`videos/`/`gifs/`/`photos/` folders. |
 | **v4.8.0** | Floating Clock Overlay (6 colors, 3 sizes, 4 corners, date toggle, screen selection) — last release before modular refactor |
 | **v4.7.0** | Rain Effects screen selection (All Screens, Built-in, External) |
 | **v4.6.0** | Version bump, updated ABOUT with full feature list |
@@ -75,7 +84,7 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 ## Technical Details
 
 **Built with:**
-- Swift 6+ (single ~3000-line file)
+- Swift 6+ (17 modular files in `src/`)
 - AVFoundation (video playback)
 - Cocoa (macOS UI)
 - QuartzCore / Core Text (Matrix Rain rendering)

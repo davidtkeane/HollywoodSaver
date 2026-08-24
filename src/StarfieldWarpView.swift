@@ -97,6 +97,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         var coreColor: NSColor      // bright center of the gradient
         var midColor: NSColor       // mid stop color
         var maxAlpha: CGFloat       // peak alpha so galaxies don't overwhelm warp stars
+        var gradient: CGGradient?
     }
 
     /// Spacecraft silhouettes Easter egg — rare sci-fi ships that drift
@@ -219,7 +220,17 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         var moonRadius: CGFloat
         var moonBasePhase: CGFloat     // starting angle in radians
         var moonOrbitSpeed: CGFloat    // rad/sec — slow
+        var gradient: CGGradient?
     }
+
+    static let colorSpace = CGColorSpaceCreateDeviceRGB()
+    static let deepSpaceGradient: CGGradient? = {
+        let colors = [
+            NSColor.black.cgColor,
+            NSColor(red: 0.05, green: 0.04, blue: 0.12, alpha: 1).cgColor
+        ]
+        return CGGradient(colorsSpace: StarfieldWarpView.colorSpace, colors: colors as CFArray, locations: [0, 1])
+    }()
 
     /// Drifting nebula clouds — huge diffuse color blobs that slowly wash
     /// across the scene. Much softer than galaxies (no bright core, very low
@@ -287,6 +298,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
 
     var displayLink: CVDisplayLink?
     var lastTimestamp: Double = 0
+    var lowPowerAccumulator: Double = 0
 
     /// ~300 background stars for ~1920x1080. Scales with frame area for
     /// consistent density on larger displays.
@@ -402,6 +414,18 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 availablePalettes = StarfieldWarpView.galaxyPalettes.shuffled()
             }
             let palette = availablePalettes.removeLast()
+            let maxAlpha = CGFloat.random(in: tier.alphaRange)
+
+            let galaxyColors = [
+                palette.core.withAlphaComponent(maxAlpha).cgColor,
+                palette.mid.withAlphaComponent(maxAlpha * 0.45).cgColor,
+                NSColor.clear.cgColor
+            ]
+            let galaxyGradient = CGGradient(
+                colorsSpace: StarfieldWarpView.colorSpace,
+                colors: galaxyColors as CFArray,
+                locations: [0, 0.45, 1]
+            )
 
             galaxies.append(Galaxy(
                 centerX: posX,
@@ -412,7 +436,8 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 rotationSpeed: CGFloat.random(in: 0.01...0.04),
                 coreColor: palette.core,
                 midColor: palette.mid,
-                maxAlpha: CGFloat.random(in: tier.alphaRange)
+                maxAlpha: maxAlpha,
+                gradient: galaxyGradient
             ))
         }
     }
@@ -497,6 +522,19 @@ class StarfieldWarpView: NSView, ScreensaverContent {
             let radius = CGFloat.random(in: type.sizeRange)
             let hasMoon = CGFloat.random(in: 0...1) < 0.4   // ~40% chance
 
+            let highlight = type.baseColor.blended(withFraction: 0.35, of: .white) ?? type.baseColor
+            let shadow = type.baseColor.blended(withFraction: 0.55, of: .black) ?? type.baseColor
+            let planetColors = [
+                highlight.cgColor,
+                type.baseColor.cgColor,
+                shadow.cgColor
+            ]
+            let planetGradient = CGGradient(
+                colorsSpace: StarfieldWarpView.colorSpace,
+                colors: planetColors as CFArray,
+                locations: [0, 0.55, 1]
+            )
+
             planets.append(Planet(
                 centerX: posX,
                 centerY: posY,
@@ -507,7 +545,8 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 moonDistance: radius * CGFloat.random(in: 1.8...2.4),
                 moonRadius: CGFloat.random(in: 4...9),
                 moonBasePhase: CGFloat.random(in: 0...(2 * .pi)),
-                moonOrbitSpeed: CGFloat.random(in: 0.08...0.25)  // slow orbit
+                moonOrbitSpeed: CGFloat.random(in: 0.08...0.25),
+                gradient: planetGradient
             ))
         }
     }
@@ -534,6 +573,21 @@ class StarfieldWarpView: NSView, ScreensaverContent {
             if view.lastTimestamp == 0 { view.lastTimestamp = timestamp }
             let dt = timestamp - view.lastTimestamp
             view.lastTimestamp = timestamp
+
+            let isLowPower = Prefs.lowPowerModeEnabled && ProcessInfo.processInfo.isLowPowerModeEnabled
+            if isLowPower {
+                view.lowPowerAccumulator += dt
+                if view.lowPowerAccumulator < (1.0 / 30.0) {
+                    return kCVReturnSuccess
+                }
+                let stepDt = view.lowPowerAccumulator
+                view.lowPowerAccumulator = 0
+                DispatchQueue.main.async {
+                    view.updateState(dt: stepDt)
+                    view.setNeedsDisplay(view.bounds)
+                }
+                return kCVReturnSuccess
+            }
 
             DispatchQueue.main.async {
                 view.updateState(dt: dt)
@@ -986,16 +1040,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         // haze). When disabled, falls back to pure black fill.
         // ──────────────────────────────────────────────
         if Prefs.starfieldGradient {
-            let colors = [
-                NSColor.black.cgColor,
-                NSColor(red: 0.05, green: 0.04, blue: 0.12, alpha: 1).cgColor
-            ]
-            let locations: [CGFloat] = [0, 1]
-            if let gradient = CGGradient(
-                colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                colors: colors as CFArray,
-                locations: locations
-            ) {
+            if let gradient = StarfieldWarpView.deepSpaceGradient {
                 let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
                 let maxRadius = max(bounds.width, bounds.height) * 0.75
                 context.drawRadialGradient(
@@ -1025,7 +1070,6 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         // ──────────────────────────────────────────────
         if Prefs.starfieldNebulae {
             let nowC = CGFloat(CACurrentMediaTime())
-            let nebulaColorSpace = CGColorSpaceCreateDeviceRGB()
             for nebula in nebulae {
                 // Subtle breathe — alpha oscillates between 70% and 100% of max.
                 let pulse = (sin(nowC * 0.25 + nebula.pulsePhase) + 1) / 2
@@ -1040,7 +1084,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 let locations: [CGFloat] = [0, 0.35, 0.7, 1]
 
                 if let gradient = CGGradient(
-                    colorsSpace: nebulaColorSpace,
+                    colorsSpace: StarfieldWarpView.colorSpace,
                     colors: colors as CFArray,
                     locations: locations
                 ) {
@@ -1065,7 +1109,6 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         // ──────────────────────────────────────────────
         if Prefs.starfieldGalaxies {
             let now = CGFloat(CACurrentMediaTime())
-            let colorSpace = CGColorSpaceCreateDeviceRGB()
             for galaxy in galaxies {
                 let rotation = galaxy.baseRotation + now * galaxy.rotationSpeed
 
@@ -1077,18 +1120,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 let aspectY = galaxy.height / galaxy.width
                 context.scaleBy(x: 1, y: aspectY)
 
-                let colors = [
-                    galaxy.coreColor.withAlphaComponent(galaxy.maxAlpha).cgColor,
-                    galaxy.midColor.withAlphaComponent(galaxy.maxAlpha * 0.45).cgColor,
-                    NSColor.clear.cgColor
-                ]
-                let locations: [CGFloat] = [0, 0.45, 1]
-
-                if let gradient = CGGradient(
-                    colorsSpace: colorSpace,
-                    colors: colors as CFArray,
-                    locations: locations
-                ) {
+                if let gradient = galaxy.gradient {
                     context.drawRadialGradient(
                         gradient,
                         startCenter: .zero,
@@ -1140,9 +1172,6 @@ class StarfieldWarpView: NSView, ScreensaverContent {
         // and optional slowly orbiting moon.
         // ──────────────────────────────────────────────
         if Prefs.starfieldPlanets && !planets.isEmpty {
-            let planetColorSpace = CGColorSpaceCreateDeviceRGB()
-            let now = CGFloat(CACurrentMediaTime())
-
             for planet in planets {
                 // 1. Saturn-style ring drawn BEHIND the planet body (back half of the ring).
                 if planet.type.hasRing {
@@ -1164,15 +1193,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                 }
 
                 // 2. Planet body — 3D gradient (highlight offset to upper-left, shadow at lower-right).
-                let highlight = planet.baseColor.blended(withFraction: 0.35, of: .white) ?? planet.baseColor
-                let shadow = planet.baseColor.blended(withFraction: 0.55, of: .black) ?? planet.baseColor
-                let colors = [
-                    highlight.cgColor,
-                    planet.baseColor.cgColor,
-                    shadow.cgColor
-                ]
-                let locations: [CGFloat] = [0, 0.55, 1]
-                if let gradient = CGGradient(colorsSpace: planetColorSpace, colors: colors as CFArray, locations: locations) {
+                if let gradient = planet.gradient {
                     let lightOffset = CGPoint(x: -planet.radius * 0.35, y: planet.radius * 0.35)
                     context.saveGState()
                     // Clip to planet circle so the gradient doesn't bleed past the edge.
@@ -1208,34 +1229,51 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                     context.translateBy(x: planet.centerX, y: planet.centerY)
                     context.rotate(by: -0.18)
                     // Clip to the bottom half so only the "front" of the ring shows over the body.
-                    context.clip(to: CGRect(x: -ringWidth, y: 0, width: ringWidth * 2, height: ringHeight))
-                    context.setStrokeColor(NSColor(red: 0.95, green: 0.88, blue: 0.70, alpha: 0.75).cgColor)
-                    context.setLineWidth(2.5)
+                    let clipRect = CGRect(x: -ringWidth/2 - 10, y: -ringHeight/2 - 10, width: ringWidth + 20, height: ringHeight/2 + 10)
+                    context.clip(to: clipRect)
+                    context.setStrokeColor(NSColor(red: 0.95, green: 0.9, blue: 0.75, alpha: 0.85).cgColor)
+                    context.setLineWidth(3.0)
                     context.strokeEllipse(in: CGRect(x: -ringWidth/2, y: -ringHeight/2, width: ringWidth, height: ringHeight))
+                    // Outer bright rim on front half
+                    context.setStrokeColor(NSColor(red: 1.0, green: 0.95, blue: 0.85, alpha: 0.45).cgColor)
+                    context.setLineWidth(1.2)
+                    let outer = CGRect(x: -ringWidth/2 - 2, y: -ringHeight/2 - 0.5, width: ringWidth + 4, height: ringHeight + 1)
+                    context.strokeEllipse(in: outer)
                     context.restoreGState()
                 }
 
-                // 4. Orbiting moon — small bright dot that circles the planet over time.
+                // 4. Orbiting moon (small rocky sphere with subtle highlight).
                 if planet.hasMoon {
-                    let phase = planet.moonBasePhase + now * planet.moonOrbitSpeed
-                    let moonX = planet.centerX + cos(phase) * planet.moonDistance
-                    let moonY = planet.centerY + sin(phase) * planet.moonDistance
-                    // Subtle glow around the moon
-                    context.setFillColor(NSColor(white: 0.95, alpha: 0.25).cgColor)
-                    context.fillEllipse(in: CGRect(
-                        x: moonX - planet.moonRadius * 1.8,
-                        y: moonY - planet.moonRadius * 1.8,
-                        width: planet.moonRadius * 3.6,
-                        height: planet.moonRadius * 3.6
-                    ))
-                    // Moon body
-                    context.setFillColor(NSColor(white: 0.9, alpha: 0.98).cgColor)
-                    context.fillEllipse(in: CGRect(
-                        x: moonX - planet.moonRadius,
-                        y: moonY - planet.moonRadius,
-                        width: planet.moonRadius * 2,
-                        height: planet.moonRadius * 2
-                    ))
+                    let now = CGFloat(CACurrentMediaTime())
+                    let moonAngle = planet.moonBasePhase + now * planet.moonOrbitSpeed
+                    let moonX = planet.centerX + cos(moonAngle) * planet.moonDistance
+                    // Flatten moon orbit into an ellipse so it looks in-plane
+                    let moonY = planet.centerY + sin(moonAngle) * planet.moonDistance * 0.4
+
+                    // Draw moon behind or in front of planet depending on angle
+                    let isBehind = sin(moonAngle) < 0
+                    if !isBehind || hypot(moonX - planet.centerX, moonY - planet.centerY) > planet.radius {
+                        context.saveGState()
+                        // Moon body
+                        context.setFillColor(NSColor(red: 0.8, green: 0.8, blue: 0.85, alpha: 0.95).cgColor)
+                        let moonRect = CGRect(
+                            x: moonX - planet.moonRadius,
+                            y: moonY - planet.moonRadius,
+                            width: planet.moonRadius * 2,
+                            height: planet.moonRadius * 2
+                        )
+                        context.fillEllipse(in: moonRect)
+                        // Tiny highlight on moon
+                        context.setFillColor(NSColor(white: 1, alpha: 0.4).cgColor)
+                        let hlRect = CGRect(
+                            x: moonX - planet.moonRadius * 0.5,
+                            y: moonY + planet.moonRadius * 0.1,
+                            width: planet.moonRadius * 0.8,
+                            height: planet.moonRadius * 0.8
+                        )
+                        context.fillEllipse(in: hlRect)
+                        context.restoreGState()
+                    }
                 }
             }
         }
@@ -1281,7 +1319,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
                     NSColor.clear.cgColor
                 ]
                 let tailLocations: [CGFloat] = [0, 0.4, 1]
-                if let tailGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: tailColors as CFArray, locations: tailLocations) {
+                if let tailGradient = CGGradient(colorsSpace: StarfieldWarpView.colorSpace, colors: tailColors as CFArray, locations: tailLocations) {
                     context.saveGState()
                     context.setLineWidth(2.5)
                     context.setLineCap(.round)
@@ -1330,7 +1368,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
             // Expanding outer halo (biggest, most diffuse)
             let haloRadius = r * 3.5
             if let haloGradient = CGGradient(
-                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colorsSpace: StarfieldWarpView.colorSpace,
                 colors: [
                     NSColor(red: 1, green: 1, blue: 1, alpha: b * 0.5).cgColor,
                     NSColor(red: 0.7, green: 0.85, blue: 1, alpha: b * 0.15).cgColor,

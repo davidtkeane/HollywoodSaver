@@ -43,6 +43,15 @@ class PhotoSlideshowView: NSView, ScreensaverContent {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        frontLayer?.frame = bounds
+        backLayer?.frame = bounds
+        CATransaction.commit()
+    }
+
     private func makeImageLayer(frame: NSRect) -> CALayer {
         let l = CALayer()
         l.frame = frame
@@ -73,7 +82,7 @@ class PhotoSlideshowView: NSView, ScreensaverContent {
     }
 
     private func advance() {
-        guard photoURLs.count > 1 else { return }
+        guard !photoURLs.isEmpty else { return }
         currentIndex = (currentIndex + 1) % photoURLs.count
 
         // Swap the two layers — the current back becomes the new front (and

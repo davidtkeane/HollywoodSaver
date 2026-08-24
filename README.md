@@ -18,11 +18,19 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Loop** | Toggle looping on/off — play forever or just once |
 | **Matrix Rain** | Built-in Matrix digital rain effect — no video file needed |
 | **Matrix Settings** | Color theme, speed, characters, density, font size, trail length |
+| **Starfield Warp** | Built-in hyperspace warp effect with 4 cosmic backdrop layers, planets, moons, comets, and spacecraft Easter eggs |
+| **Photo Slideshow** | Built-in Ken Burns cinematic photo slideshow with smooth crossfading from `photos/` folder |
+| **GPU Hyperspace** | Built-in Metal fragment/compute shader running at 60/120 FPS with <1% CPU overhead |
+| **Web Wallpapers** | Interactive live HTML5 canvas & WebGL wallpapers from the `web/` folder via `WKWebView` |
+| **Per-Monitor Setup** | Assign different videos, effects, or web wallpapers to individual screens independently |
+| **Sequential Playlist** | Auto-advance through videos in sequence when playback ends, with seamless looping |
+| **Battery Saver Mode** | Automatic 30fps throttling when macOS Low Power Mode is active on battery |
+| **Customizable Clock** | 12-hour AM/PM vs 24-hour military time, seconds toggle, date toggle, 6 colors, 3 sizes |
 | **Shuffle** | Pick a random video from your collection |
 | **Auto Play** | Automatically start playing when the app launches |
 | **Launch at Login** | Start the app every time you log in |
 | **Custom Icon** | Drop a `ranger.png` next to the app for a custom menu bar icon |
-| **Organized Folders** | `videos/` and `gifs/` subfolders keep your media tidy |
+| **Organized Folders** | `videos/`, `gifs/`, `photos/`, and `web/` subfolders keep your media tidy |
 | **Portable** | Move the whole folder anywhere — the app finds its videos |
 | **Auto Update** | Checks GitHub for newer versions and offers one-click update with backup |
 | **Break Reminder** | Countdown timer (60/45/30/15 min or custom) with fullscreen break screen overlay |
@@ -39,7 +47,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
-> **v5.0.0 — Architecture Refactor Release.** Same feature set as v4.8.0, now living in a clean modular layout (14 source files in `src/`, `docs/`, `images/`, `videos/`, `gifs/` folders). Every feature from v1.0.0 through v4.8.0 remains free forever. Pro features (registration, advanced effects, Rangers token ecosystem) will arrive in a future release.
+> **v5.0.1 — Architecture & Feature Upgrade Release.** Clean modular architecture (26 source files in `src/`, 6,521 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Sequential video playlists, and Low Power battery savings. Every feature remains 100% free and open-source.
 
 📖 **More docs:** [Full feature list & version history](docs/ABOUT.md) · [Complete changelog](docs/CHANGELOG.md)
 
@@ -159,19 +167,22 @@ HollywoodSaver/
   README.md               # You are here
   build.sh                # Build script — creates the .app bundle
   run.sh                  # Launcher with terminal info
-  src/                    # Swift source (14 files, ~3600 lines total)
+  src/                    # Swift source (17 files, ~5750 lines total)
     main.swift              # App startup
-    AppDelegate.swift       # Main controller (~2500 lines)
+    AppDelegate.swift       # Main controller (~2900 lines)
     Prefs.swift             # UserDefaults wrapper
     MatrixConfig.swift      # Matrix Rain config enums
     MatrixRainView.swift    # Matrix Rain rendering
+    StarfieldWarpView.swift # Starfield hyperspace simulation & cosmic layers
+    PhotoSlideshowView.swift# Ken Burns photo slideshow engine
     VideoPlayerView.swift   # AVPlayer-based video playback
     GifPlayerView.swift     # Frame-by-frame GIF animation
     LockScreen.swift        # Lock overlay + password screen
     BreakReminderView.swift # Break screen overlay
     ClockOverlayView.swift  # Floating clock display
     CountdownOverlayView.swift
-    SliderMenuView.swift    # Volume slider menu item
+    SliderMenuView.swift    # Volume/opacity slider menu items
+    ToggleMenuItemView.swift# Stay-open checkbox menu item
     InputMonitor.swift      # Global/local event monitoring
     ScreensaverWindow.swift # Custom NSWindow + protocol
   images/                 # App logo and screenshots
@@ -182,6 +193,7 @@ HollywoodSaver/
     CHANGELOG.md            # All release notes v1.0 → v5.0
   videos/                 # Drop .mp4, .mov, .m4v files here
   gifs/                   # Drop .gif files here
+  photos/                 # Drop .jpg, .png, .heic files here (slideshow)
   release/                # 🎖️ Maintainer-only — you don't need to touch this
     release.sh              # Publishes GitHub Releases (maintainer workflow)
   HollywoodSaver.app/     # Built app (generated by build.sh)

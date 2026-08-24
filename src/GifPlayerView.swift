@@ -57,23 +57,25 @@ class GifPlayerView: NSView, ScreensaverContent {
         guard let link = displayLink else { return }
 
         let callback: CVDisplayLinkOutputCallback = { _, inNow, _, _, _, userInfo -> CVReturn in
-            let view = Unmanaged<GifPlayerView>.fromOpaque(userInfo!).takeUnretainedValue()
-            let timestamp = Double(inNow.pointee.videoTime) / Double(inNow.pointee.videoTimeScale)
+            autoreleasepool {
+                let view = Unmanaged<GifPlayerView>.fromOpaque(userInfo!).takeUnretainedValue()
+                let timestamp = Double(inNow.pointee.videoTime) / Double(inNow.pointee.videoTimeScale)
 
-            if view.lastTimestamp == 0 {
+                if view.lastTimestamp == 0 {
+                    view.lastTimestamp = timestamp
+                }
+                let dt = timestamp - view.lastTimestamp
                 view.lastTimestamp = timestamp
-            }
-            let dt = timestamp - view.lastTimestamp
-            view.lastTimestamp = timestamp
-            view.elapsed += dt
+                view.elapsed += dt
 
-            if view.elapsed >= view.frames[view.currentFrame].delay {
-                view.elapsed -= view.frames[view.currentFrame].delay
-                view.currentFrame = (view.currentFrame + 1) % view.frames.count
-                let frame = view.frames[view.currentFrame]
-                let img = NSImage(cgImage: frame.image, size: NSSize(width: frame.image.width, height: frame.image.height))
-                DispatchQueue.main.async {
-                    view.imageView.image = img
+                if view.elapsed >= view.frames[view.currentFrame].delay {
+                    view.elapsed -= view.frames[view.currentFrame].delay
+                    view.currentFrame = (view.currentFrame + 1) % view.frames.count
+                    let frame = view.frames[view.currentFrame]
+                    let img = NSImage(cgImage: frame.image, size: NSSize(width: frame.image.width, height: frame.image.height))
+                    DispatchQueue.main.async {
+                        view.imageView.image = img
+                    }
                 }
             }
             return kCVReturnSuccess

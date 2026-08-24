@@ -100,6 +100,7 @@ class LockScreenView: NSView, NSTextFieldDelegate {
 
     func setupPasswordField() {
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 28))
+        field.wantsLayer = true
         field.placeholderString = "Enter password..."
         field.alignment = .center
         field.font = NSFont.systemFont(ofSize: 16)

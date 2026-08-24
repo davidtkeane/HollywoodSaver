@@ -14,7 +14,7 @@ APP_DIR="$SCRIPT_DIR/HollywoodSaver.app"
 # Read version from Swift source (single source of truth)
 VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/src/AppDelegate.swift" | grep -o '"[^"]*"' | tr -d '"')
 if [ -z "$VERSION" ]; then
-    VERSION="2.2.0"
+    VERSION="5.0.1"
     echo -e "${YELLOW}Warning: Could not read version from Swift source, using default ${VERSION}${NC}"
 fi
 
@@ -165,6 +165,10 @@ COMPILE_OUTPUT=$(swiftc \
     -framework ImageIO \
     -framework ServiceManagement \
     -framework IOKit \
+    -framework UserNotifications \
+    -framework WebKit \
+    -framework Metal \
+    -framework MetalKit \
     -o "$APP_DIR/Contents/MacOS/HollywoodSaver" \
     "${SWIFT_SOURCES[@]}" 2>&1)
 
