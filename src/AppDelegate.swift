@@ -18,7 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     static let photoSlideshowSentinel = "##PHOTO_SLIDESHOW##"
     static let metalHyperspaceSentinel = "##METAL_HYPERSPACE##"
     /// Single source of truth for About, updater, build.sh, and release.sh. Bump here only.
-    static let appVersion = "5.0.3"
+    static let appVersion = "5.0.4"
     static let githubRepo = "davidtkeane/HollywoodSaver"
 
     var statusItem: NSStatusItem!

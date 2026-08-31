@@ -2,12 +2,10 @@
 
 All notable changes to HollywoodSaver are documented here.
 
-## [5.0.3] - 2026-08-31 — Ranger Menu & Per-Screen Dismiss
-
-App version remains `5.0.3` (`AppDelegate.appVersion`).
+## [5.0.4] - 2026-08-31 — Ranger Menu & Per-Screen Dismiss
 
 ### Added
-- **Ranger menu IA** — status-item menu is now Now playing (only while something is on) → Play → Displays (multi-monitor) → Overlays → Settings → About → grey version + Check for Update → Quit. The video library is no longer dumped on the root menu.
+- **Ranger menu IA** — status-item menu is now Now playing (only while something is on) → Play → Displays (multi-monitor) → Overlays → Settings, then grey version + Check for Update → About HollywoodSaver → Contribute → Quit. The video library is no longer dumped on the root menu.
 - **Last-used screen** — click a clip or effect in Play to start screensaver on the last screen(s) you used (`Prefs.lastPlayScreen`). Option-click is ambient. First play with no saved preference still uses all screens.
 - **Per-screen mouse dismiss** — mouse/click on a playing screen stops that screen only. Escape still stops all. 0.5s grace after a per-screen dismiss so sliding onto a neighbour does not kill it. Cursor returns when any screen is free.
 
@@ -15,6 +13,7 @@ App version remains `5.0.3` (`AppDelegate.appVersion`).
 - Displays is a per-monitor assigner (status, pick a clip/effect, stop this display) without a Screensaver/Ambient third level.
 - Rain effects live under Overlays. Matrix / Starfield / slideshow knobs live under Settings.
 - Shuffle, Play All Sequential, and built-in effect quick-plays use last-used screens instead of always every display.
+- Footer order: version + Check for Update, then About (no ellipsis), then Contribute, then Quit.
 
 ---
 

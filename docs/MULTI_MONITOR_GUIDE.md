@@ -2,7 +2,7 @@
 
 **Date:** August 24, 2026  
 **Target:** macOS 15+ (Apple Silicon — M1/M2/M3/M4)  
-**Status:** Active Reference (`v5.0.3+`)  
+**Status:** Active Reference (`v5.0.4+`)  
 
 ---
 
@@ -133,7 +133,7 @@ It now snapshots each window's `screenSessionMedia` / `screenSessionMode` / `tar
 ### 5.1 Versioning Single Source of Truth
 - Version string is declared exclusively in [`src/AppDelegate.swift`](file:///Users/ranger/M4-Stuff/Ranger-Projects/HollywoodSaver/src/AppDelegate.swift):
   ```swift
-  static let appVersion = "5.0.3"
+  static let appVersion = "5.0.4"
   ```
 - `build.sh` and `release/release.sh` extract this version dynamically at build time:
   ```bash

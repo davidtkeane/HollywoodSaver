@@ -314,18 +314,6 @@ extension AppDelegate {
     // MARK: - About / Version / Quit
 
     func addAboutVersionQuit(to menu: NSMenu) {
-        let aboutItem = NSMenuItem(title: "About HollywoodSaver…", action: #selector(showAbout), keyEquivalent: "")
-        menu.addItem(aboutItem)
-
-        let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
-        let contributeSubmenu = NSMenu(title: "Contribute")
-        let coffeeItem = NSMenuItem(title: "☕  Buy Me a Coffee", action: #selector(openBuyMeACoffee), keyEquivalent: "")
-        contributeSubmenu.addItem(coffeeItem)
-        let hodlItem = NSMenuItem(title: "🪙  Hodl H3LLCOIN", action: #selector(openH3llcoin), keyEquivalent: "")
-        contributeSubmenu.addItem(hodlItem)
-        contributeItem.submenu = contributeSubmenu
-        menu.addItem(contributeItem)
-
         menu.addItem(NSMenuItem.separator())
 
         if let latest = latestVersion, isNewerVersion(latest, than: AppDelegate.appVersion) {
@@ -351,6 +339,18 @@ extension AppDelegate {
             let checkItem = NSMenuItem(title: "Check for Update", action: #selector(manualCheckForUpdate), keyEquivalent: "")
             menu.addItem(checkItem)
         }
+
+        let aboutItem = NSMenuItem(title: "About HollywoodSaver", action: #selector(showAbout), keyEquivalent: "")
+        menu.addItem(aboutItem)
+
+        let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
+        let contributeSubmenu = NSMenu(title: "Contribute")
+        let coffeeItem = NSMenuItem(title: "☕  Buy Me a Coffee", action: #selector(openBuyMeACoffee), keyEquivalent: "")
+        contributeSubmenu.addItem(coffeeItem)
+        let hodlItem = NSMenuItem(title: "🪙  Hodl H3LLCOIN", action: #selector(openH3llcoin), keyEquivalent: "")
+        contributeSubmenu.addItem(hodlItem)
+        contributeItem.submenu = contributeSubmenu
+        menu.addItem(contributeItem)
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))

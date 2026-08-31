@@ -48,7 +48,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
-> **v5.0.3 — Ranger menu, per-monitor playback, per-screen dismiss.** Clean modular architecture (26 source files in `src/`). Click plays last-used screen, Option-click is ambient. Every feature remains 100% free and open-source.
+> **v5.0.4 — Ranger menu, per-monitor playback, per-screen dismiss.** Clean modular architecture (26 source files in `src/`). Click plays last-used screen, Option-click is ambient. Every feature remains 100% free and open-source.
 
 📖 **More docs:** [Multi-Monitor Architecture Guide](docs/MULTI_MONITOR_GUIDE.md) · [Full feature list & version history](docs/ABOUT.md) · [Complete changelog](docs/CHANGELOG.md)
 
@@ -187,7 +187,7 @@ HollywoodSaver/
     thematrix.png           # Matrix Rain screenshot
   docs/                   # Project documentation
     ABOUT.md                # Full feature list + version history
-    CHANGELOG.md            # All release notes v1.0 → v5.0.3
+    CHANGELOG.md            # All release notes v1.0 → v5.0.4
   videos/                 # Drop .mp4, .mov, .m4v files here
   gifs/                   # Drop .gif files here
   photos/                 # Drop .jpg, .png, .heic files here (slideshow)
