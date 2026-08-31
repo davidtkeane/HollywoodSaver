@@ -8,7 +8,326 @@ extension AppDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        // Version info / Update available
+        addNowPlayingItems(to: menu)
+
+        let media = findMedia()
+        let screens = NSScreen.screens
+
+        let playItem = NSMenuItem(title: "Play", action: nil, keyEquivalent: "")
+        playItem.submenu = makePlayMenu(media: media)
+        menu.addItem(playItem)
+
+        if screens.count > 1 {
+            let displaysItem = NSMenuItem(title: "Displays", action: nil, keyEquivalent: "")
+            displaysItem.submenu = makeDisplaysMenu(media: media, screens: screens)
+            menu.addItem(displaysItem)
+        }
+
+        let overlaysItem = NSMenuItem(title: "Overlays", action: nil, keyEquivalent: "")
+        overlaysItem.submenu = makeOverlaysMenu()
+        menu.addItem(overlaysItem)
+
+        let settingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        settingsItem.submenu = makeSettingsMenu()
+        menu.addItem(settingsItem)
+
+        addAboutVersionQuit(to: menu)
+        return menu
+    }
+
+    // MARK: - Now Playing
+
+    func addNowPlayingItems(to menu: NSMenu) {
+        let windows = screensaverWindows
+        guard !windows.isEmpty else { return }
+
+        var resolved: [(window: ScreensaverWindow, screen: NSScreen?, name: String)] = []
+        for win in windows {
+            let screen = NSScreen.screens.first { $0.screenIdentifier == win.targetScreenID }
+            let screenName: String
+            if let screen {
+                screenName = screen.localizedName
+            } else if let id = win.targetScreenID, let idx = id.firstIndex(of: "_") {
+                screenName = String(id[id.index(after: idx)...])
+            } else {
+                screenName = "Display"
+            }
+            resolved.append((win, screen, screenName))
+        }
+
+        for item in resolved {
+            let media = item.window.screenSessionMedia ?? currentMediaPath ?? ""
+            var status = "● \(friendlyMediaName(for: media)) — \(item.name)"
+            if item.window.screenSessionMode == .ambient {
+                status += " (Ambient)"
+            }
+            let statusItem = NSMenuItem(title: status, action: nil, keyEquivalent: "")
+            statusItem.isEnabled = false
+            menu.addItem(statusItem)
+        }
+
+        if resolved.count == 1 {
+            if let screen = resolved[0].screen {
+                let stopThis = NSMenuItem(title: "Stop This Screen", action: #selector(stopPlayingOnScreenAction(_:)), keyEquivalent: "")
+                stopThis.representedObject = screen
+                menu.addItem(stopThis)
+            }
+        } else {
+            for item in resolved {
+                guard let screen = item.screen else { continue }
+                let stop = NSMenuItem(title: "Stop \(item.name)", action: #selector(stopPlayingOnScreenAction(_:)), keyEquivalent: "")
+                stop.representedObject = screen
+                menu.addItem(stop)
+            }
+        }
+
+        let stopAll = NSMenuItem(title: "Stop All", action: #selector(stopPlaying), keyEquivalent: "")
+        menu.addItem(stopAll)
+        menu.addItem(NSMenuItem.separator())
+    }
+
+    func friendlyMediaName(for path: String) -> String {
+        switch path {
+        case AppDelegate.matrixRainSentinel: return "Matrix Rain"
+        case AppDelegate.starfieldWarpSentinel: return "Starfield Warp"
+        case AppDelegate.photoSlideshowSentinel: return "Photo Slideshow"
+        case AppDelegate.metalHyperspaceSentinel: return "GPU Hyperspace"
+        default: return displayName(for: path)
+        }
+    }
+
+    /// Clickable play item. `screens == nil` uses last-used screens (`playMediaDefault`).
+    func makePlayableItem(title: String, file: String, screens: [NSScreen]? = nil) -> NSMenuItem {
+        let item: NSMenuItem
+        if let screens {
+            item = NSMenuItem(title: title, action: #selector(playMediaOnScreenDefault(_:)), keyEquivalent: "")
+            item.representedObject = (file, screens) as AnyObject
+            if screens.count == 1, let screen = screens.first,
+               let active = mediaPlaying(on: screen), active.media == file {
+                item.state = .on
+            }
+        } else {
+            item = NSMenuItem(title: title, action: #selector(playMediaDefault(_:)), keyEquivalent: "")
+            item.representedObject = file as AnyObject
+            if screensaverWindows.contains(where: { $0.screenSessionMedia == file }) {
+                item.state = .on
+            }
+        }
+        return item
+    }
+
+    // MARK: - Play
+
+    func makePlayMenu(media: [String]) -> NSMenu {
+        let menu = NSMenu(title: "Play")
+
+        if media.count > 1 {
+            menu.addItem(NSMenuItem(title: "Shuffle", action: #selector(playShuffle), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: "Play All Sequential", action: #selector(playAllVideosSequential), keyEquivalent: ""))
+            menu.addItem(NSMenuItem.separator())
+        }
+
+        if media.isEmpty {
+            let item = NSMenuItem(title: "No media found", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+            let hint = NSMenuItem(title: "Add .mp4/.gif files next to the app", action: nil, keyEquivalent: "")
+            hint.isEnabled = false
+            menu.addItem(hint)
+        } else {
+            let videosItem = NSMenuItem(title: "Videos", action: nil, keyEquivalent: "")
+            let videosMenu = NSMenu(title: "Videos")
+            for file in media {
+                videosMenu.addItem(makePlayableItem(title: displayName(for: file), file: file))
+            }
+            videosItem.submenu = videosMenu
+            menu.addItem(videosItem)
+        }
+
+        let effectsItem = NSMenuItem(title: "Effects", action: nil, keyEquivalent: "")
+        effectsItem.submenu = makeEffectsMenu()
+        menu.addItem(effectsItem)
+
+        menu.addItem(NSMenuItem.separator())
+        let hint = NSMenuItem(title: "Option-click = ambient", action: nil, keyEquivalent: "")
+        hint.isEnabled = false
+        menu.addItem(hint)
+
+        return menu
+    }
+
+    func makeEffectsMenu() -> NSMenu {
+        let menu = NSMenu(title: "Effects")
+        menu.addItem(makePlayableItem(title: "Matrix Rain", file: AppDelegate.matrixRainSentinel))
+        menu.addItem(makePlayableItem(title: "Starfield Warp", file: AppDelegate.starfieldWarpSentinel))
+        menu.addItem(makePlayableItem(title: "GPU Hyperspace ⚡", file: AppDelegate.metalHyperspaceSentinel))
+        menu.addItem(makePlayableItem(title: "Photo Slideshow 📸", file: AppDelegate.photoSlideshowSentinel))
+
+        let webPages = findWebWallpapers()
+        if !webPages.isEmpty {
+            menu.addItem(NSMenuItem.separator())
+            let webItem = NSMenuItem(title: "Web Wallpapers 🌐", action: nil, keyEquivalent: "")
+            let webMenu = NSMenu(title: "Web")
+            for pageURL in webPages {
+                webMenu.addItem(makePlayableItem(title: displayName(for: pageURL.path), file: pageURL.path))
+            }
+            webItem.submenu = webMenu
+            menu.addItem(webItem)
+        }
+        return menu
+    }
+
+    // MARK: - Displays
+
+    func makeDisplaysMenu(media: [String], screens: [NSScreen]) -> NSMenu {
+        let menu = NSMenu(title: "Displays")
+
+        for screen in screens {
+            let screenSubmenu = NSMenu()
+            let active = mediaPlaying(on: screen)
+
+            let statusTitle: String
+            if let active {
+                let modeLabel = active.mode == .ambient ? "Ambient" : "Screensaver"
+                statusTitle = "● \(friendlyMediaName(for: active.media)) (\(modeLabel))"
+            } else {
+                statusTitle = "○ Status: Idle"
+            }
+            let statusItem = NSMenuItem(title: statusTitle, action: nil, keyEquivalent: "")
+            statusItem.isEnabled = false
+            screenSubmenu.addItem(statusItem)
+            screenSubmenu.addItem(NSMenuItem.separator())
+
+            let target = [screen]
+            screenSubmenu.addItem(makePlayableItem(title: "Matrix Rain", file: AppDelegate.matrixRainSentinel, screens: target))
+            screenSubmenu.addItem(makePlayableItem(title: "Starfield Warp", file: AppDelegate.starfieldWarpSentinel, screens: target))
+            screenSubmenu.addItem(makePlayableItem(title: "GPU Hyperspace ⚡", file: AppDelegate.metalHyperspaceSentinel, screens: target))
+            screenSubmenu.addItem(makePlayableItem(title: "Photo Slideshow 📸", file: AppDelegate.photoSlideshowSentinel, screens: target))
+
+            if !media.isEmpty {
+                screenSubmenu.addItem(NSMenuItem.separator())
+                let videosHeader = NSMenuItem(title: "Videos & GIFs", action: nil, keyEquivalent: "")
+                videosHeader.isEnabled = false
+                screenSubmenu.addItem(videosHeader)
+
+                for file in media {
+                    screenSubmenu.addItem(makePlayableItem(title: displayName(for: file), file: file, screens: target))
+                }
+            }
+
+            if active != nil {
+                screenSubmenu.addItem(NSMenuItem.separator())
+                let stopDisplayItem = NSMenuItem(title: "Stop This Display", action: #selector(stopPlayingOnScreenAction(_:)), keyEquivalent: "")
+                stopDisplayItem.representedObject = screen
+                screenSubmenu.addItem(stopDisplayItem)
+            }
+
+            let screenMenuItem = NSMenuItem(title: screen.localizedName, action: nil, keyEquivalent: "")
+            screenMenuItem.submenu = screenSubmenu
+            menu.addItem(screenMenuItem)
+        }
+
+        return menu
+    }
+
+    // MARK: - Overlays
+
+    func makeOverlaysMenu() -> NSMenu {
+        let menu = NSMenu(title: "Overlays")
+        menu.addItem(makeClockMenuItem())
+        menu.addItem(makeRainMenuItem())
+        menu.addItem(makeBreakMenuItem())
+        menu.addItem(makeLockMenuItem())
+        menu.addItem(makeSleepMenuItem())
+        return menu
+    }
+
+    // MARK: - Settings
+
+    func makeSettingsMenu() -> NSMenu {
+        let menu = NSMenu(title: "Settings")
+
+        let soundItem = NSMenuItem(title: "Sound", action: #selector(toggleSound), keyEquivalent: "")
+        soundItem.state = Prefs.soundEnabled ? .on : .off
+        menu.addItem(soundItem)
+
+        let volumeView = SliderMenuView(title: "Volume", minValue: 0, maxValue: 1, currentValue: Double(Prefs.volume)) { newVal in
+            Prefs.volume = newVal
+            for cv in self.contentViews {
+                if let vp = cv as? VideoPlayerView {
+                    vp.queuePlayer.volume = newVal
+                }
+            }
+        }
+        let volumeMenuItem = NSMenuItem()
+        volumeMenuItem.view = volumeView
+        menu.addItem(volumeMenuItem)
+
+        let opacityView = SliderMenuView(title: "Opacity", minValue: 0.1, maxValue: 1, currentValue: Double(Prefs.ambientOpacity)) { newVal in
+            Prefs.ambientOpacity = newVal
+            if self.currentMode == .ambient {
+                for w in self.screensaverWindows {
+                    w.alphaValue = CGFloat(newVal)
+                }
+            }
+        }
+        let opacityMenuItem = NSMenuItem()
+        opacityMenuItem.view = opacityView
+        menu.addItem(opacityMenuItem)
+
+        let loopItem = NSMenuItem(title: "Loop", action: #selector(toggleLoop), keyEquivalent: "")
+        loopItem.state = Prefs.loopEnabled ? .on : .off
+        menu.addItem(loopItem)
+
+        let playlistToggle = NSMenuItem(title: "Sequential Playlist", action: #selector(togglePlaylistMode), keyEquivalent: "")
+        playlistToggle.state = Prefs.playlistMode ? .on : .off
+        menu.addItem(playlistToggle)
+
+        let lowPowerToggle = NSMenuItem(title: "Battery Saver (30fps)", action: #selector(toggleLowPowerMode), keyEquivalent: "")
+        lowPowerToggle.state = Prefs.lowPowerModeEnabled ? .on : .off
+        menu.addItem(lowPowerToggle)
+
+        let autoPlayItem = NSMenuItem(title: "Auto Play on Launch", action: #selector(toggleAutoPlay), keyEquivalent: "")
+        autoPlayItem.state = Prefs.autoPlayEnabled ? .on : .off
+        menu.addItem(autoPlayItem)
+
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.state = Prefs.launchAtLogin ? .on : .off
+        menu.addItem(loginItem)
+
+        let dockItem = NSMenuItem(title: "Show in Dock", action: #selector(toggleDockIcon), keyEquivalent: "")
+        dockItem.state = Prefs.showDockIcon ? .on : .off
+        menu.addItem(dockItem)
+
+        let desktopItem = NSMenuItem(title: "Desktop Shortcut", action: #selector(toggleDesktopShortcut), keyEquivalent: "")
+        desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
+        menu.addItem(desktopItem)
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(makeMatrixSettingsItem())
+        menu.addItem(makeStarfieldSettingsItem())
+        menu.addItem(makeSlideshowSettingsItem())
+
+        return menu
+    }
+
+    // MARK: - About / Version / Quit
+
+    func addAboutVersionQuit(to menu: NSMenu) {
+        let aboutItem = NSMenuItem(title: "About HollywoodSaver…", action: #selector(showAbout), keyEquivalent: "")
+        menu.addItem(aboutItem)
+
+        let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
+        let contributeSubmenu = NSMenu(title: "Contribute")
+        let coffeeItem = NSMenuItem(title: "☕  Buy Me a Coffee", action: #selector(openBuyMeACoffee), keyEquivalent: "")
+        contributeSubmenu.addItem(coffeeItem)
+        let hodlItem = NSMenuItem(title: "🪙  Hodl H3LLCOIN", action: #selector(openH3llcoin), keyEquivalent: "")
+        contributeSubmenu.addItem(hodlItem)
+        contributeItem.submenu = contributeSubmenu
+        menu.addItem(contributeItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         if let latest = latestVersion, isNewerVersion(latest, than: AppDelegate.appVersion) {
             let updateItem = NSMenuItem(
                 title: "Update Available: v\(AppDelegate.appVersion) → v\(latest)",
@@ -20,7 +339,6 @@ extension AppDelegate {
                 attributes: [.foregroundColor: NSColor.systemOrange]
             )
             menu.addItem(updateItem)
-            menu.addItem(NSMenuItem.separator())
         } else {
             let versionItem = NSMenuItem(
                 title: "HollywoodSaver v\(AppDelegate.appVersion)",
@@ -32,174 +350,18 @@ extension AppDelegate {
 
             let checkItem = NSMenuItem(title: "Check for Update", action: #selector(manualCheckForUpdate), keyEquivalent: "")
             menu.addItem(checkItem)
-            menu.addItem(NSMenuItem.separator())
         }
 
-        // If ambient mode is active, show stop option at the top
-        if currentMode == .ambient, let name = nowPlayingName {
-            let stopItem = NSMenuItem(title: "Stop \(name)", action: #selector(stopPlaying), keyEquivalent: "")
-            menu.addItem(stopItem)
-            menu.addItem(NSMenuItem.separator())
-        }
-
-        let media = findMedia()
-        let screens = NSScreen.screens
-        let builtIn = screens.first { $0.localizedName.contains("Built") }
-        let externals = screens.filter { !$0.localizedName.contains("Built") }
-
-        if media.isEmpty {
-            let item = NSMenuItem(title: "No media found", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-            let hint = NSMenuItem(title: "Add .mp4/.gif files next to the app", action: nil, keyEquivalent: "")
-            hint.isEnabled = false
-            menu.addItem(hint)
-        } else if media.count == 1 {
-            selectedMedia = media[0]
-            let name = displayName(for: media[0])
-            let header = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-            menu.addItem(NSMenuItem.separator())
-            addScreenItems(to: menu, file: media[0], builtIn: builtIn, externals: externals)
-        } else {
-            // Sequential Playlist & Shuffle options
-            let playlistItem = NSMenuItem(title: "Play All (Sequential)", action: #selector(playAllVideosSequential), keyEquivalent: "")
-            menu.addItem(playlistItem)
-
-            let shuffleItem = NSMenuItem(title: "Shuffle Random", action: #selector(playShuffle), keyEquivalent: "")
-            menu.addItem(shuffleItem)
-            menu.addItem(NSMenuItem.separator())
-
-            for file in media {
-                let name = displayName(for: file)
-                let submenu = NSMenu()
-                addScreenItems(to: submenu, file: file, builtIn: builtIn, externals: externals)
-
-                let menuItem = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-                menuItem.submenu = submenu
-                menu.addItem(menuItem)
-            }
-        }
-
-        // Per-Display Setup (when multiple monitors attached)
-        if screens.count > 1 {
-            menu.addItem(NSMenuItem.separator())
-            let displaysItem = NSMenuItem(title: "Displays (\(screens.count))", action: nil, keyEquivalent: "")
-            let displaysSubmenu = NSMenu(title: "Displays")
-
-            for screen in screens {
-                let screenSubmenu = NSMenu()
-                let active = mediaPlaying(on: screen)
-
-                let statusTitle = active != nil ? "● Playing: \(displayName(for: active!.media)) (\(active!.mode == .ambient ? "Ambient" : "Screensaver"))" : "○ Status: Idle"
-                let statusItem = NSMenuItem(title: statusTitle, action: nil, keyEquivalent: "")
-                statusItem.isEnabled = false
-                screenSubmenu.addItem(statusItem)
-                screenSubmenu.addItem(NSMenuItem.separator())
-
-                // Quick Assign: Matrix Rain
-                let matrixScreenItem = NSMenuItem(title: "Matrix Rain", action: nil, keyEquivalent: "")
-                let matrixScreenMenu = NSMenu()
-                let matrixSav = NSMenuItem(title: "Screensaver", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
-                matrixSav.representedObject = (AppDelegate.matrixRainSentinel, [screen]) as AnyObject
-                let matrixAmb = NSMenuItem(title: "Ambient", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
-                matrixAmb.representedObject = (AppDelegate.matrixRainSentinel, [screen]) as AnyObject
-                matrixScreenMenu.addItem(matrixSav)
-                matrixScreenMenu.addItem(matrixAmb)
-                matrixScreenItem.submenu = matrixScreenMenu
-                screenSubmenu.addItem(matrixScreenItem)
-
-                // Quick Assign: Starfield Warp
-                let starfieldScreenItem = NSMenuItem(title: "Starfield Warp", action: nil, keyEquivalent: "")
-                let starfieldScreenMenu = NSMenu()
-                let starfieldSav = NSMenuItem(title: "Screensaver", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
-                starfieldSav.representedObject = (AppDelegate.starfieldWarpSentinel, [screen]) as AnyObject
-                let starfieldAmb = NSMenuItem(title: "Ambient", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
-                starfieldAmb.representedObject = (AppDelegate.starfieldWarpSentinel, [screen]) as AnyObject
-                starfieldScreenMenu.addItem(starfieldSav)
-                starfieldScreenMenu.addItem(starfieldAmb)
-                starfieldScreenItem.submenu = starfieldScreenMenu
-                screenSubmenu.addItem(starfieldScreenItem)
-
-                // Quick Assign: GPU Hyperspace ⚡
-                let metalScreenItem = NSMenuItem(title: "GPU Hyperspace ⚡", action: nil, keyEquivalent: "")
-                let metalScreenMenu = NSMenu()
-                let metalSav = NSMenuItem(title: "Screensaver", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
-                metalSav.representedObject = (AppDelegate.metalHyperspaceSentinel, [screen]) as AnyObject
-                let metalAmb = NSMenuItem(title: "Ambient", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
-                metalAmb.representedObject = (AppDelegate.metalHyperspaceSentinel, [screen]) as AnyObject
-                metalScreenMenu.addItem(metalSav)
-                metalScreenMenu.addItem(metalAmb)
-                metalScreenItem.submenu = metalScreenMenu
-                screenSubmenu.addItem(metalScreenItem)
-
-                // Quick Assign: Photo Slideshow
-                let photoScreenItem = NSMenuItem(title: "Photo Slideshow", action: nil, keyEquivalent: "")
-                let photoScreenMenu = NSMenu()
-                let photoSav = NSMenuItem(title: "Screensaver", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
-                photoSav.representedObject = (AppDelegate.photoSlideshowSentinel, [screen]) as AnyObject
-                let photoAmb = NSMenuItem(title: "Ambient", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
-                photoAmb.representedObject = (AppDelegate.photoSlideshowSentinel, [screen]) as AnyObject
-                photoScreenMenu.addItem(photoSav)
-                photoScreenMenu.addItem(photoAmb)
-                photoScreenItem.submenu = photoScreenMenu
-                screenSubmenu.addItem(photoScreenItem)
-
-                // Videos list
-                if !media.isEmpty {
-                    screenSubmenu.addItem(NSMenuItem.separator())
-                    let videosHeader = NSMenuItem(title: "Videos & GIFs", action: nil, keyEquivalent: "")
-                    videosHeader.isEnabled = false
-                    screenSubmenu.addItem(videosHeader)
-
-                    for file in media {
-                        let name = displayName(for: file)
-                        let fileItem = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-                        let fileSubmenu = NSMenu()
-                        let sav = NSMenuItem(title: "Screensaver", action: #selector(playMediaOnScreensScreensaver(_:)), keyEquivalent: "")
-                        sav.representedObject = (file, [screen]) as AnyObject
-                        let amb = NSMenuItem(title: "Ambient", action: #selector(playMediaAmbient(_:)), keyEquivalent: "")
-                        amb.representedObject = (file, [screen]) as AnyObject
-                        fileSubmenu.addItem(sav)
-                        fileSubmenu.addItem(amb)
-                        fileItem.submenu = fileSubmenu
-                        screenSubmenu.addItem(fileItem)
-                    }
-                }
-
-                if active != nil {
-                    screenSubmenu.addItem(NSMenuItem.separator())
-                    let stopDisplayItem = NSMenuItem(title: "Stop This Display", action: #selector(stopPlayingOnScreenAction(_:)), keyEquivalent: "")
-                    stopDisplayItem.representedObject = screen
-                    screenSubmenu.addItem(stopDisplayItem)
-                }
-
-                let screenMenuItem = NSMenuItem(title: screen.localizedName, action: nil, keyEquivalent: "")
-                screenMenuItem.submenu = screenSubmenu
-                displaysSubmenu.addItem(screenMenuItem)
-            }
-
-            if isPlaying {
-                displaysSubmenu.addItem(NSMenuItem.separator())
-                let stopAllDisplays = NSMenuItem(title: "Stop All Displays", action: #selector(stopPlaying), keyEquivalent: "")
-                displaysSubmenu.addItem(stopAllDisplays)
-            }
-
-            displaysItem.submenu = displaysSubmenu
-            menu.addItem(displaysItem)
-        }
-
-        // Matrix Rain - built-in effect
         menu.addItem(NSMenuItem.separator())
-        let matrixItem = NSMenuItem(title: "Matrix Rain", action: nil, keyEquivalent: "")
-        let matrixSubmenu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    }
 
-        // Matrix settings submenu
-        let settingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+    // MARK: - Matrix Settings (knobs only; play lives under Play/Displays)
+
+    func makeMatrixSettingsItem() -> NSMenuItem {
+        let settingsItem = NSMenuItem(title: "Matrix Rain", action: nil, keyEquivalent: "")
         let settingsSubmenu = NSMenu()
 
-        // Color Theme
         let colorMenu = NSMenu()
         for theme in MatrixColorTheme.allCases {
             let item = NSMenuItem(title: theme.rawValue, action: #selector(setMatrixColor(_:)), keyEquivalent: "")
@@ -211,7 +373,6 @@ extension AppDelegate {
         colorItem.submenu = colorMenu
         settingsSubmenu.addItem(colorItem)
 
-        // Speed
         let speedMenu = NSMenu()
         for s in MatrixSpeed.allCases {
             let item = NSMenuItem(title: s.rawValue, action: #selector(setMatrixSpeed(_:)), keyEquivalent: "")
@@ -223,7 +384,6 @@ extension AppDelegate {
         speedItem.submenu = speedMenu
         settingsSubmenu.addItem(speedItem)
 
-        // Characters
         let charMenu = NSMenu()
         for cs in MatrixCharacterSet.allCases {
             let item = NSMenuItem(title: cs.rawValue, action: #selector(setMatrixCharSet(_:)), keyEquivalent: "")
@@ -235,7 +395,6 @@ extension AppDelegate {
         charItem.submenu = charMenu
         settingsSubmenu.addItem(charItem)
 
-        // Density
         let densityMenu = NSMenu()
         for d in MatrixDensity.allCases {
             let item = NSMenuItem(title: d.rawValue, action: #selector(setMatrixDensity(_:)), keyEquivalent: "")
@@ -247,7 +406,6 @@ extension AppDelegate {
         densityItem.submenu = densityMenu
         settingsSubmenu.addItem(densityItem)
 
-        // Font Size
         let fontMenu = NSMenu()
         for f in MatrixFontSize.allCases {
             let item = NSMenuItem(title: f.rawValue, action: #selector(setMatrixFontSize(_:)), keyEquivalent: "")
@@ -259,7 +417,6 @@ extension AppDelegate {
         fontItem.submenu = fontMenu
         settingsSubmenu.addItem(fontItem)
 
-        // Trail Length
         let trailMenu = NSMenu()
         for t in MatrixTrailLength.allCases {
             let item = NSMenuItem(title: t.rawValue, action: #selector(setMatrixTrailLength(_:)), keyEquivalent: "")
@@ -272,84 +429,15 @@ extension AppDelegate {
         settingsSubmenu.addItem(trailItem)
 
         settingsItem.submenu = settingsSubmenu
-        matrixSubmenu.addItem(settingsItem)
+        return settingsItem
+    }
 
-        // Rain Effects submenu (sibling of Settings, inside Matrix Rain)
-        let rainItem = NSMenuItem(title: "Rain Effects", action: nil, keyEquivalent: "")
-        let rainSubmenu = NSMenu(title: "Rain Effects")
+    // MARK: - Starfield Settings (knobs only)
 
-        // Rain Behind Windows toggle
-        let rainBehindToggle = NSMenuItem(title: "Rain Behind Windows", action: #selector(toggleRainBehind), keyEquivalent: "")
-        rainBehindToggle.state = !rainBehindWindows.isEmpty ? .on : .off
-        rainSubmenu.addItem(rainBehindToggle)
-
-        let rainBehindOpacityView = SliderMenuView(title: "Behind Opacity", minValue: 0.1, maxValue: 1, currentValue: Double(Prefs.rainBehindOpacity)) { newVal in
-            Prefs.rainBehindOpacity = newVal
-            for w in self.rainBehindWindows {
-                w.alphaValue = CGFloat(newVal)
-            }
-        }
-        let rainBehindOpacityItem = NSMenuItem()
-        rainBehindOpacityItem.view = rainBehindOpacityView
-        rainSubmenu.addItem(rainBehindOpacityItem)
-
-        rainSubmenu.addItem(NSMenuItem.separator())
-
-        // Rain Over Windows toggle
-        let rainOverToggle = NSMenuItem(title: "Rain Over Windows", action: #selector(toggleRainOverlay), keyEquivalent: "")
-        rainOverToggle.state = !rainOverlayWindows.isEmpty ? .on : .off
-        rainSubmenu.addItem(rainOverToggle)
-
-        let rainOverOpacityView = SliderMenuView(title: "Over Opacity", minValue: 0.05, maxValue: 0.5, currentValue: Double(Prefs.rainOverlayOpacity)) { newVal in
-            Prefs.rainOverlayOpacity = newVal
-            for w in self.rainOverlayWindows {
-                w.alphaValue = CGFloat(newVal)
-            }
-        }
-        let rainOverOpacityItem = NSMenuItem()
-        rainOverOpacityItem.view = rainOverOpacityView
-        rainSubmenu.addItem(rainOverOpacityItem)
-
-        // Display selection for rain effects
-        rainSubmenu.addItem(NSMenuItem.separator())
-        let rainDisplayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
-        let rainDisplaySubmenu = NSMenu(title: "Display")
-        for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
-            let item = NSMenuItem(title: label, action: #selector(setRainScreen(_:)), keyEquivalent: "")
-            item.representedObject = value as AnyObject
-            item.state = Prefs.rainScreen == value ? .on : .off
-            rainDisplaySubmenu.addItem(item)
-        }
-        rainDisplayItem.submenu = rainDisplaySubmenu
-        rainSubmenu.addItem(rainDisplayItem)
-
-        // Stop All Rain (only show when at least one rain mode is active)
-        if !rainBehindWindows.isEmpty || !rainOverlayWindows.isEmpty {
-            rainSubmenu.addItem(NSMenuItem.separator())
-            let stopAllRain = NSMenuItem(title: "Stop All Rain", action: #selector(stopAllRainEffects), keyEquivalent: "")
-            rainSubmenu.addItem(stopAllRain)
-        }
-
-        rainItem.submenu = rainSubmenu
-        matrixSubmenu.addItem(rainItem)
-
-        matrixSubmenu.addItem(NSMenuItem.separator())
-
-        // Screen selection for Matrix Rain
-        addScreenItems(to: matrixSubmenu, file: AppDelegate.matrixRainSentinel, builtIn: builtIn, externals: externals)
-
-        matrixItem.submenu = matrixSubmenu
-        menu.addItem(matrixItem)
-
-        // Starfield Warp - built-in hyperspace effect
-        let starfieldItem = NSMenuItem(title: "Starfield Warp", action: nil, keyEquivalent: "")
-        let starfieldSubmenu = NSMenu()
-
-        // Starfield settings submenu
-        let starfieldSettingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+    func makeStarfieldSettingsItem() -> NSMenuItem {
+        let starfieldSettingsItem = NSMenuItem(title: "Starfield Warp", action: nil, keyEquivalent: "")
         let starfieldSettingsSubmenu = NSMenu()
 
-        // Speed
         let starfieldSpeedMenu = NSMenu()
         for s in StarfieldSpeed.allCases {
             let item = NSMenuItem(title: s.rawValue, action: #selector(setStarfieldSpeed(_:)), keyEquivalent: "")
@@ -361,7 +449,6 @@ extension AppDelegate {
         starfieldSpeedItem.submenu = starfieldSpeedMenu
         starfieldSettingsSubmenu.addItem(starfieldSpeedItem)
 
-        // Color
         let starfieldColorMenu = NSMenu()
         for c in StarfieldColor.allCases {
             let item = NSMenuItem(title: c.rawValue, action: #selector(setStarfieldColor(_:)), keyEquivalent: "")
@@ -373,7 +460,6 @@ extension AppDelegate {
         starfieldColorItem.submenu = starfieldColorMenu
         starfieldSettingsSubmenu.addItem(starfieldColorItem)
 
-        // Density
         let starfieldDensityMenu = NSMenu()
         for d in StarfieldDensity.allCases {
             let item = NSMenuItem(title: d.rawValue, action: #selector(setStarfieldDensity(_:)), keyEquivalent: "")
@@ -385,13 +471,10 @@ extension AppDelegate {
         starfieldDensityItem.submenu = starfieldDensityMenu
         starfieldSettingsSubmenu.addItem(starfieldDensityItem)
 
-        // Backdrop — layered cosmic background (each layer toggleable)
         starfieldSettingsSubmenu.addItem(NSMenuItem.separator())
         let starfieldBackdropItem = NSMenuItem(title: "Backdrop", action: nil, keyEquivalent: "")
         let starfieldBackdropMenu = NSMenu()
 
-        // Backdrop layer toggles — use ToggleMenuItemView so the menu stays
-        // open while the user flicks multiple layers on/off to compare.
         let bgStarsItem = NSMenuItem()
         bgStarsItem.view = ToggleMenuItemView(title: "Background Stars", isOn: Prefs.starfieldBackgroundStars) { newValue in
             Prefs.starfieldBackgroundStars = newValue
@@ -416,7 +499,6 @@ extension AppDelegate {
         }
         starfieldBackdropMenu.addItem(nebulaeItem)
 
-        // Planets submenu with Show toggle + count override
         starfieldBackdropMenu.addItem(NSMenuItem.separator())
         let planetsItem = NSMenuItem(title: "Planets", action: nil, keyEquivalent: "")
         let planetsMenu = NSMenu()
@@ -446,7 +528,6 @@ extension AppDelegate {
         planetsItem.submenu = planetsMenu
         starfieldBackdropMenu.addItem(planetsItem)
 
-        // Comets submenu — passing comets + screen-dive Easter egg
         starfieldBackdropMenu.addItem(NSMenuItem.separator())
         let cometsItem = NSMenuItem(title: "Comets", action: nil, keyEquivalent: "")
         let cometsMenu = NSMenu()
@@ -465,14 +546,12 @@ extension AppDelegate {
 
         cometsMenu.addItem(NSMenuItem.separator())
 
-        // Debug trigger — forces the dive comet animation NOW for testing
         let triggerDive = NSMenuItem(title: "🎬 Trigger Screen-Dive Now", action: #selector(triggerStarfieldDiveCometNow), keyEquivalent: "")
         cometsMenu.addItem(triggerDive)
 
         cometsItem.submenu = cometsMenu
         starfieldBackdropMenu.addItem(cometsItem)
 
-        // Spacecraft Easter egg submenu 🛸
         let spacecraftItem = NSMenuItem(title: "Spacecraft 🛸", action: nil, keyEquivalent: "")
         let spacecraftMenu = NSMenu()
 
@@ -484,14 +563,12 @@ extension AppDelegate {
 
         spacecraftMenu.addItem(NSMenuItem.separator())
 
-        // Info header (disabled)
         let shipInfo = NSMenuItem(title: "Rare visitors: Falcon, Enterprise, TARDIS, Serenity, UFO", action: nil, keyEquivalent: "")
         shipInfo.isEnabled = false
         spacecraftMenu.addItem(shipInfo)
 
         spacecraftMenu.addItem(NSMenuItem.separator())
 
-        // Debug trigger
         let triggerSpacecraft = NSMenuItem(title: "🎬 Spawn Random Spacecraft Now", action: #selector(triggerStarfieldSpacecraftNow), keyEquivalent: "")
         spacecraftMenu.addItem(triggerSpacecraft)
 
@@ -502,118 +579,121 @@ extension AppDelegate {
         starfieldSettingsSubmenu.addItem(starfieldBackdropItem)
 
         starfieldSettingsItem.submenu = starfieldSettingsSubmenu
-        starfieldSubmenu.addItem(starfieldSettingsItem)
+        return starfieldSettingsItem
+    }
 
-        starfieldSubmenu.addItem(NSMenuItem.separator())
+    // MARK: - Slideshow Settings (knobs only)
 
-        // Screen selection for Starfield Warp
-        addScreenItems(to: starfieldSubmenu, file: AppDelegate.starfieldWarpSentinel, builtIn: builtIn, externals: externals)
+    func makeSlideshowSettingsItem() -> NSMenuItem {
+        let slideshowSettingsItem = NSMenuItem(title: "Photo Slideshow", action: nil, keyEquivalent: "")
+        let slideshowSettingsSubmenu = NSMenu()
 
-        starfieldItem.submenu = starfieldSubmenu
-        menu.addItem(starfieldItem)
-
-        // GPU Hyperspace Warp - Metal GPU shader effect
-        let metalItem = NSMenuItem(title: "GPU Hyperspace ⚡", action: nil, keyEquivalent: "")
-        let metalSubmenu = NSMenu()
-        addScreenItems(to: metalSubmenu, file: AppDelegate.metalHyperspaceSentinel, builtIn: builtIn, externals: externals)
-        metalItem.submenu = metalSubmenu
-        menu.addItem(metalItem)
-
-        // Photo Slideshow (Ken Burns) — built-in effect
-        let slideshowItem = NSMenuItem(title: "Photo Slideshow 📸", action: nil, keyEquivalent: "")
-        let slideshowSubmenu = NSMenu()
         let photoCount = findPhotos().count
-
         if photoCount == 0 {
             let noPhotos = NSMenuItem(title: "No photos found", action: nil, keyEquivalent: "")
             noPhotos.isEnabled = false
-            slideshowSubmenu.addItem(noPhotos)
+            slideshowSettingsSubmenu.addItem(noPhotos)
             let hint = NSMenuItem(title: "Drop .jpg / .png / .heic into photos/", action: nil, keyEquivalent: "")
             hint.isEnabled = false
-            slideshowSubmenu.addItem(hint)
+            slideshowSettingsSubmenu.addItem(hint)
+            slideshowSettingsSubmenu.addItem(NSMenuItem.separator())
         } else {
             let countItem = NSMenuItem(title: "\(photoCount) photo\(photoCount == 1 ? "" : "s") ready", action: nil, keyEquivalent: "")
             countItem.isEnabled = false
-            slideshowSubmenu.addItem(countItem)
-            slideshowSubmenu.addItem(NSMenuItem.separator())
-
-            // Slideshow Settings submenu
-            let slideshowSettingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
-            let slideshowSettingsSubmenu = NSMenu()
-
-            // Duration options
-            let durationItem = NSMenuItem(title: "Slide Duration", action: nil, keyEquivalent: "")
-            let durationMenu = NSMenu()
-            for (label, seconds) in [("3 seconds", 3.0), ("5 seconds", 5.0), ("8 seconds", 8.0), ("10 seconds", 10.0), ("15 seconds", 15.0), ("30 seconds", 30.0)] {
-                let item = NSMenuItem(title: label, action: #selector(setSlideshowDuration(_:)), keyEquivalent: "")
-                item.representedObject = seconds as AnyObject
-                item.state = Prefs.slideshowDuration == seconds ? .on : .off
-                durationMenu.addItem(item)
-            }
-            durationItem.submenu = durationMenu
-            slideshowSettingsSubmenu.addItem(durationItem)
-
-            // Transition options
-            let transitionItem = NSMenuItem(title: "Transition Speed", action: nil, keyEquivalent: "")
-            let transitionMenu = NSMenu()
-            for (label, seconds) in [("Fast (0.5s)", 0.5), ("Normal (1.5s)", 1.5), ("Slow (3s)", 3.0)] {
-                let item = NSMenuItem(title: label, action: #selector(setSlideshowTransition(_:)), keyEquivalent: "")
-                item.representedObject = seconds as AnyObject
-                item.state = Prefs.slideshowTransition == seconds ? .on : .off
-                transitionMenu.addItem(item)
-            }
-            transitionItem.submenu = transitionMenu
-            slideshowSettingsSubmenu.addItem(transitionItem)
-
-            slideshowSettingsItem.submenu = slideshowSettingsSubmenu
-            slideshowSubmenu.addItem(slideshowSettingsItem)
-
-            slideshowSubmenu.addItem(NSMenuItem.separator())
-
-            // Screen selection for Photo Slideshow (reuses addScreenItems helper)
-            addScreenItems(to: slideshowSubmenu, file: AppDelegate.photoSlideshowSentinel, builtIn: builtIn, externals: externals)
+            slideshowSettingsSubmenu.addItem(countItem)
+            slideshowSettingsSubmenu.addItem(NSMenuItem.separator())
         }
 
-        slideshowItem.submenu = slideshowSubmenu
-        menu.addItem(slideshowItem)
+        let durationItem = NSMenuItem(title: "Slide Duration", action: nil, keyEquivalent: "")
+        let durationMenu = NSMenu()
+        for (label, seconds) in [("3 seconds", 3.0), ("5 seconds", 5.0), ("8 seconds", 8.0), ("10 seconds", 10.0), ("15 seconds", 15.0), ("30 seconds", 30.0)] {
+            let item = NSMenuItem(title: label, action: #selector(setSlideshowDuration(_:)), keyEquivalent: "")
+            item.representedObject = seconds as AnyObject
+            item.state = Prefs.slideshowDuration == seconds ? .on : .off
+            durationMenu.addItem(item)
+        }
+        durationItem.submenu = durationMenu
+        slideshowSettingsSubmenu.addItem(durationItem)
 
-        // Web / HTML5 Live Wallpapers
-        let webItem = NSMenuItem(title: "Web Wallpapers 🌐", action: nil, keyEquivalent: "")
-        let webSubmenu = NSMenu()
-        let webPages = findWebWallpapers()
+        let transitionItem = NSMenuItem(title: "Transition Speed", action: nil, keyEquivalent: "")
+        let transitionMenu = NSMenu()
+        for (label, seconds) in [("Fast (0.5s)", 0.5), ("Normal (1.5s)", 1.5), ("Slow (3s)", 3.0)] {
+            let item = NSMenuItem(title: label, action: #selector(setSlideshowTransition(_:)), keyEquivalent: "")
+            item.representedObject = seconds as AnyObject
+            item.state = Prefs.slideshowTransition == seconds ? .on : .off
+            transitionMenu.addItem(item)
+        }
+        transitionItem.submenu = transitionMenu
+        slideshowSettingsSubmenu.addItem(transitionItem)
 
-        if webPages.isEmpty {
-            let noWeb = NSMenuItem(title: "No HTML wallpapers found", action: nil, keyEquivalent: "")
-            noWeb.isEnabled = false
-            webSubmenu.addItem(noWeb)
-            let hint = NSMenuItem(title: "Drop .html files into web/ folder", action: nil, keyEquivalent: "")
-            hint.isEnabled = false
-            webSubmenu.addItem(hint)
-        } else {
-            let countItem = NSMenuItem(title: "\(webPages.count) web background\(webPages.count == 1 ? "" : "s") ready", action: nil, keyEquivalent: "")
-            countItem.isEnabled = false
-            webSubmenu.addItem(countItem)
-            webSubmenu.addItem(NSMenuItem.separator())
+        slideshowSettingsItem.submenu = slideshowSettingsSubmenu
+        return slideshowSettingsItem
+    }
 
-            for pageURL in webPages {
-                let name = displayName(for: pageURL.path)
-                let pageMenuItem = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-                let pageSubmenu = NSMenu()
-                addScreenItems(to: pageSubmenu, file: pageURL.path, builtIn: builtIn, externals: externals)
-                pageMenuItem.submenu = pageSubmenu
-                webSubmenu.addItem(pageMenuItem)
+    // MARK: - Rain (Overlays)
+
+    func makeRainMenuItem() -> NSMenuItem {
+        let rainItem = NSMenuItem(title: "Rain", action: nil, keyEquivalent: "")
+        let rainSubmenu = NSMenu(title: "Rain")
+
+        let rainBehindToggle = NSMenuItem(title: "Rain Behind Windows", action: #selector(toggleRainBehind), keyEquivalent: "")
+        rainBehindToggle.state = !rainBehindWindows.isEmpty ? .on : .off
+        rainSubmenu.addItem(rainBehindToggle)
+
+        let rainBehindOpacityView = SliderMenuView(title: "Behind Opacity", minValue: 0.1, maxValue: 1, currentValue: Double(Prefs.rainBehindOpacity)) { newVal in
+            Prefs.rainBehindOpacity = newVal
+            for w in self.rainBehindWindows {
+                w.alphaValue = CGFloat(newVal)
             }
         }
+        let rainBehindOpacityItem = NSMenuItem()
+        rainBehindOpacityItem.view = rainBehindOpacityView
+        rainSubmenu.addItem(rainBehindOpacityItem)
 
-        webItem.submenu = webSubmenu
-        menu.addItem(webItem)
+        rainSubmenu.addItem(NSMenuItem.separator())
 
-        // Break Reminder
-        menu.addItem(NSMenuItem.separator())
-        let breakItem = NSMenuItem(title: "Break Reminder", action: nil, keyEquivalent: "")
+        let rainOverToggle = NSMenuItem(title: "Rain Over Windows", action: #selector(toggleRainOverlay), keyEquivalent: "")
+        rainOverToggle.state = !rainOverlayWindows.isEmpty ? .on : .off
+        rainSubmenu.addItem(rainOverToggle)
+
+        let rainOverOpacityView = SliderMenuView(title: "Over Opacity", minValue: 0.05, maxValue: 0.5, currentValue: Double(Prefs.rainOverlayOpacity)) { newVal in
+            Prefs.rainOverlayOpacity = newVal
+            for w in self.rainOverlayWindows {
+                w.alphaValue = CGFloat(newVal)
+            }
+        }
+        let rainOverOpacityItem = NSMenuItem()
+        rainOverOpacityItem.view = rainOverOpacityView
+        rainSubmenu.addItem(rainOverOpacityItem)
+
+        rainSubmenu.addItem(NSMenuItem.separator())
+        let rainDisplayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
+        let rainDisplaySubmenu = NSMenu(title: "Display")
+        for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
+            let item = NSMenuItem(title: label, action: #selector(setRainScreen(_:)), keyEquivalent: "")
+            item.representedObject = value as AnyObject
+            item.state = Prefs.rainScreen == value ? .on : .off
+            rainDisplaySubmenu.addItem(item)
+        }
+        rainDisplayItem.submenu = rainDisplaySubmenu
+        rainSubmenu.addItem(rainDisplayItem)
+
+        if !rainBehindWindows.isEmpty || !rainOverlayWindows.isEmpty {
+            rainSubmenu.addItem(NSMenuItem.separator())
+            let stopAllRain = NSMenuItem(title: "Stop All Rain", action: #selector(stopAllRainEffects), keyEquivalent: "")
+            rainSubmenu.addItem(stopAllRain)
+        }
+
+        rainItem.submenu = rainSubmenu
+        return rainItem
+    }
+
+    // MARK: - Break Reminder (Overlays)
+
+    func makeBreakMenuItem() -> NSMenuItem {
+        let breakItem = NSMenuItem(title: "Break / Pomodoro", action: nil, keyEquivalent: "")
         let breakSubmenu = NSMenu(title: "Break Reminder")
 
-        // Session stats
         let todayItem = NSMenuItem(title: "Today: \(Prefs.breaksTakenToday) break\(Prefs.breaksTakenToday == 1 ? "" : "s")", action: nil, keyEquivalent: "")
         todayItem.isEnabled = false
         breakSubmenu.addItem(todayItem)
@@ -645,7 +725,6 @@ extension AppDelegate {
             let customItem = NSMenuItem(title: "Custom...", action: #selector(startCustomBreakTimer), keyEquivalent: "")
             breakSubmenu.addItem(customItem)
 
-            // Custom presets
             let presets = Prefs.customPresets
             if !presets.isEmpty {
                 breakSubmenu.addItem(NSMenuItem.separator())
@@ -656,7 +735,6 @@ extension AppDelegate {
                 }
             }
 
-            // Manage Presets
             let presetsItem = NSMenuItem(title: "Presets", action: nil, keyEquivalent: "")
             let presetsSubmenu = NSMenu(title: "Presets")
             let saveItem = NSMenuItem(title: "Save Current (\(Prefs.breakDuration) min)", action: #selector(saveCurrentPreset), keyEquivalent: "")
@@ -669,7 +747,6 @@ extension AppDelegate {
             breakSubmenu.addItem(presetsItem)
         }
 
-        // Pomodoro
         breakSubmenu.addItem(NSMenuItem.separator())
         let pomoItem = NSMenuItem(title: "Pomodoro", action: nil, keyEquivalent: "")
         let pomoSubmenu = NSMenu(title: "Pomodoro")
@@ -704,7 +781,6 @@ extension AppDelegate {
         pomoItem.submenu = pomoSubmenu
         breakSubmenu.addItem(pomoItem)
 
-        // Sound settings
         breakSubmenu.addItem(NSMenuItem.separator())
         let breakSoundItem = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
         let breakSoundSubmenu = NSMenu(title: "Sound")
@@ -730,7 +806,6 @@ extension AppDelegate {
         resumeItem.state = Prefs.resumeAfterBreak ? .on : .off
         breakSubmenu.addItem(resumeItem)
 
-        // Countdown overlay settings
         breakSubmenu.addItem(NSMenuItem.separator())
 
         let displayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
@@ -755,7 +830,6 @@ extension AppDelegate {
         posItem.submenu = posSubmenu
         breakSubmenu.addItem(posItem)
 
-        // Style settings
         let styleItem = NSMenuItem(title: "Style", action: nil, keyEquivalent: "")
         let styleSubmenu = NSMenu(title: "Style")
         let overlayColorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
@@ -782,9 +856,12 @@ extension AppDelegate {
         breakSubmenu.addItem(styleItem)
 
         breakItem.submenu = breakSubmenu
-        menu.addItem(breakItem)
+        return breakItem
+    }
 
-        // Clock overlay submenu (top level, between Break Reminder and Lock Screen)
+    // MARK: - Clock (Overlays)
+
+    func makeClockMenuItem() -> NSMenuItem {
         let clockItem = NSMenuItem(title: "Clock", action: nil, keyEquivalent: "")
         let clockSubmenu = NSMenu(title: "Clock")
 
@@ -806,7 +883,6 @@ extension AppDelegate {
 
         clockSubmenu.addItem(NSMenuItem.separator())
 
-        // Clock Display
         let clockDisplayItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
         let clockDisplaySubmenu = NSMenu(title: "Display")
         for (label, value) in [("All Screens", "all"), ("Built-in", "builtin"), ("External", "external")] {
@@ -818,7 +894,6 @@ extension AppDelegate {
         clockDisplayItem.submenu = clockDisplaySubmenu
         clockSubmenu.addItem(clockDisplayItem)
 
-        // Clock Position
         let clockPositionItem = NSMenuItem(title: "Position", action: nil, keyEquivalent: "")
         let clockPositionSubmenu = NSMenu(title: "Position")
         for (label, value) in [("Top Right", "topRight"), ("Top Left", "topLeft"), ("Bottom Right", "bottomRight"), ("Bottom Left", "bottomLeft")] {
@@ -830,7 +905,6 @@ extension AppDelegate {
         clockPositionItem.submenu = clockPositionSubmenu
         clockSubmenu.addItem(clockPositionItem)
 
-        // Clock Color
         let clockColorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
         let clockColorSubmenu = NSMenu(title: "Color")
         for color in ["Green", "Blue", "Red", "Orange", "White", "Purple"] {
@@ -842,7 +916,6 @@ extension AppDelegate {
         clockColorItem.submenu = clockColorSubmenu
         clockSubmenu.addItem(clockColorItem)
 
-        // Clock Size
         let clockSizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
         let clockSizeSubmenu = NSMenu(title: "Size")
         for size in ["Compact", "Normal", "Large"] {
@@ -855,11 +928,12 @@ extension AppDelegate {
         clockSubmenu.addItem(clockSizeItem)
 
         clockItem.submenu = clockSubmenu
-        menu.addItem(clockItem)
+        return clockItem
+    }
 
-        menu.addItem(NSMenuItem.separator())
+    // MARK: - Lock (Overlays)
 
-        // Lock Screen
+    func makeLockMenuItem() -> NSMenuItem {
         let lockItem = NSMenuItem(title: "Lock Screen", action: nil, keyEquivalent: "")
         let lockSubmenu = NSMenu(title: "Lock Screen")
 
@@ -880,10 +954,12 @@ extension AppDelegate {
         }
 
         lockItem.submenu = lockSubmenu
-        menu.addItem(lockItem)
+        return lockItem
+    }
 
-        // Sleep (between Lock Screen and Contribute)
-        menu.addItem(NSMenuItem.separator())
+    // MARK: - Sleep (Overlays)
+
+    func makeSleepMenuItem() -> NSMenuItem {
         let sleepItem = NSMenuItem(title: "Sleep", action: nil, keyEquivalent: "")
         let sleepSubmenu = NSMenu(title: "Sleep")
 
@@ -926,96 +1002,7 @@ extension AppDelegate {
         sleepSubmenu.addItem(resumeAfterSleepItem)
 
         sleepItem.submenu = sleepSubmenu
-        menu.addItem(sleepItem)
-
-        // Playback / App config toggles (moved to bottom for cleaner feature-first layout)
-        menu.addItem(NSMenuItem.separator())
-
-        // Sound toggle
-        let soundItem = NSMenuItem(title: "Sound", action: #selector(toggleSound), keyEquivalent: "")
-        soundItem.state = Prefs.soundEnabled ? .on : .off
-        menu.addItem(soundItem)
-
-        // Volume slider
-        let volumeView = SliderMenuView(title: "Volume", minValue: 0, maxValue: 1, currentValue: Double(Prefs.volume)) { newVal in
-            Prefs.volume = newVal
-            // Update any currently playing video players
-            for cv in self.contentViews {
-                if let vp = cv as? VideoPlayerView {
-                    vp.queuePlayer.volume = newVal
-                }
-            }
-        }
-        let volumeMenuItem = NSMenuItem()
-        volumeMenuItem.view = volumeView
-        menu.addItem(volumeMenuItem)
-
-        // Opacity slider (ambient mode)
-        let opacityView = SliderMenuView(title: "Opacity", minValue: 0.1, maxValue: 1, currentValue: Double(Prefs.ambientOpacity)) { newVal in
-            Prefs.ambientOpacity = newVal
-            if self.currentMode == .ambient {
-                for w in self.screensaverWindows {
-                    w.alphaValue = CGFloat(newVal)
-                }
-            }
-        }
-        let opacityMenuItem = NSMenuItem()
-        opacityMenuItem.view = opacityView
-        menu.addItem(opacityMenuItem)
-
-        // Loop toggle
-        let loopItem = NSMenuItem(title: "Loop", action: #selector(toggleLoop), keyEquivalent: "")
-        loopItem.state = Prefs.loopEnabled ? .on : .off
-        menu.addItem(loopItem)
-
-        // Sequential Playlist toggle
-        let playlistToggle = NSMenuItem(title: "Sequential Playlist", action: #selector(togglePlaylistMode), keyEquivalent: "")
-        playlistToggle.state = Prefs.playlistMode ? .on : .off
-        menu.addItem(playlistToggle)
-
-        // Low Power / Battery Saver Mode toggle
-        let lowPowerToggle = NSMenuItem(title: "Battery Saver (30fps)", action: #selector(toggleLowPowerMode), keyEquivalent: "")
-        lowPowerToggle.state = Prefs.lowPowerModeEnabled ? .on : .off
-        menu.addItem(lowPowerToggle)
-
-        // Auto Play toggle
-        let autoPlayItem = NSMenuItem(title: "Auto Play on Launch", action: #selector(toggleAutoPlay), keyEquivalent: "")
-        autoPlayItem.state = Prefs.autoPlayEnabled ? .on : .off
-        menu.addItem(autoPlayItem)
-
-        // Launch at login
-        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        loginItem.state = Prefs.launchAtLogin ? .on : .off
-        menu.addItem(loginItem)
-
-        // Show in Dock
-        let dockItem = NSMenuItem(title: "Show in Dock", action: #selector(toggleDockIcon), keyEquivalent: "")
-        dockItem.state = Prefs.showDockIcon ? .on : .off
-        menu.addItem(dockItem)
-
-        // Desktop Shortcut
-        let desktopItem = NSMenuItem(title: "Desktop Shortcut", action: #selector(toggleDesktopShortcut), keyEquivalent: "")
-        desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
-        menu.addItem(desktopItem)
-
-        // About
-        menu.addItem(NSMenuItem.separator())
-        let aboutItem = NSMenuItem(title: "About HollywoodSaver…", action: #selector(showAbout), keyEquivalent: "")
-        menu.addItem(aboutItem)
-
-        // Contribute
-        let contributeItem = NSMenuItem(title: "Contribute", action: nil, keyEquivalent: "")
-        let contributeSubmenu = NSMenu(title: "Contribute")
-        let coffeeItem = NSMenuItem(title: "☕  Buy Me a Coffee", action: #selector(openBuyMeACoffee), keyEquivalent: "")
-        contributeSubmenu.addItem(coffeeItem)
-        let hodlItem = NSMenuItem(title: "🪙  Hodl H3LLCOIN", action: #selector(openH3llcoin), keyEquivalent: "")
-        contributeSubmenu.addItem(hodlItem)
-        contributeItem.submenu = contributeSubmenu
-        menu.addItem(contributeItem)
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        return menu
+        return sleepItem
     }
 }
 

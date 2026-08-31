@@ -58,6 +58,10 @@ class Prefs {
         get { defaults.string(forKey: "lastPlayMode") }
         set { defaults.set(newValue, forKey: "lastPlayMode") }
     }
+    static var lastPlayScreen: String? {
+        get { defaults.string(forKey: "lastPlayScreen") }
+        set { defaults.set(newValue, forKey: "lastPlayScreen") }
+    }
 
     // Matrix Rain preferences
     static var matrixColorTheme: String {

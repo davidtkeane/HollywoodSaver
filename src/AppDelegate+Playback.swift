@@ -22,6 +22,20 @@ extension AppDelegate {
         startPlaying(media: pair.0, on: pair.1, mode: .screensaver)
     }
 
+    /// Play on last-used screen(s). Click = screensaver, Option-click = ambient.
+    @objc func playMediaDefault(_ sender: NSMenuItem) {
+        guard let file = sender.representedObject as? String else { return }
+        let ambient = NSEvent.modifierFlags.contains(.option)
+        startPlaying(media: file, on: targetScreens(for: Prefs.lastPlayScreen ?? "all"), mode: ambient ? .ambient : .screensaver)
+    }
+
+    /// Play a file on a specific screen list. Click = screensaver, Option-click = ambient.
+    @objc func playMediaOnScreenDefault(_ sender: NSMenuItem) {
+        guard let pair = sender.representedObject as? (String, [NSScreen]) else { return }
+        let ambient = NSEvent.modifierFlags.contains(.option)
+        startPlaying(media: pair.0, on: pair.1, mode: ambient ? .ambient : .screensaver)
+    }
+
     // MARK: - Ambient Mode Actions
 
     @objc func playMediaAmbient(_ sender: NSMenuItem) {
@@ -35,28 +49,28 @@ extension AppDelegate {
         let media = findMedia()
         guard !media.isEmpty else { return }
         let random = media[Int.random(in: 0..<media.count)]
-        startPlaying(media: random, on: NSScreen.screens, mode: .screensaver)
+        startPlaying(media: random, on: targetScreens(for: Prefs.lastPlayScreen ?? "all"), mode: .screensaver)
     }
 
     @objc func playAllVideosSequential() {
         let videos = findMedia().filter { !isGif($0) }
         guard let first = videos.first else { return }
         Prefs.playlistMode = true
-        startPlaying(media: first, on: NSScreen.screens, mode: .screensaver)
+        startPlaying(media: first, on: targetScreens(for: Prefs.lastPlayScreen ?? "all"), mode: .screensaver)
     }
 
     // MARK: - Built-in Effect Quick Plays
 
     @objc func playMatrixRainAllScreens() {
-        startPlaying(media: AppDelegate.matrixRainSentinel, on: NSScreen.screens, mode: .screensaver)
+        startPlaying(media: AppDelegate.matrixRainSentinel, on: targetScreens(for: Prefs.lastPlayScreen ?? "all"), mode: .screensaver)
     }
 
     @objc func playStarfieldWarpAllScreens() {
-        startPlaying(media: AppDelegate.starfieldWarpSentinel, on: NSScreen.screens, mode: .screensaver)
+        startPlaying(media: AppDelegate.starfieldWarpSentinel, on: targetScreens(for: Prefs.lastPlayScreen ?? "all"), mode: .screensaver)
     }
 
     @objc func playMetalHyperspaceAllScreens() {
-        startPlaying(media: AppDelegate.metalHyperspaceSentinel, on: NSScreen.screens, mode: .screensaver)
+        startPlaying(media: AppDelegate.metalHyperspaceSentinel, on: targetScreens(for: Prefs.lastPlayScreen ?? "all"), mode: .screensaver)
     }
 
     // MARK: - Core Playback Engine
@@ -113,6 +127,15 @@ extension AppDelegate {
             Prefs.lastMediaFilename = (media as NSString).lastPathComponent
         }
         Prefs.lastPlayMode = mode == .ambient ? "ambient" : "screensaver"
+        if screens.count == NSScreen.screens.count {
+            Prefs.lastPlayScreen = "all"
+        } else if screens.count == 1, let s = screens.first {
+            Prefs.lastPlayScreen = s.screenIdentifier
+        } else if !screens.isEmpty && screens.allSatisfy({ !$0.localizedName.contains("Built") }) {
+            Prefs.lastPlayScreen = "external"
+        } else {
+            Prefs.lastPlayScreen = "all"
+        }
 
         if activityToken == nil {
             activityToken = ProcessInfo.processInfo.beginActivity(
@@ -230,8 +253,12 @@ extension AppDelegate {
 
             let activeFrames = screensaverWins.map { $0.frame }
             if inputMonitor == nil {
-                inputMonitor = InputMonitor(activeFrames: activeFrames) { [weak self] in
-                    self?.stopPlaying()
+                inputMonitor = InputMonitor(activeFrames: activeFrames) { [weak self] point in
+                    if let point {
+                        self?.stopPlayingAtPoint(point)
+                    } else {
+                        self?.stopPlaying()
+                    }
                 }
                 inputMonitor?.start()
             } else {
@@ -302,6 +329,16 @@ extension AppDelegate {
         // Newly attached screens with no prior assignment stay idle.
     }
 
+    func stopPlayingAtPoint(_ point: NSPoint) {
+        guard let win = screensaverWindows.first(where: {
+            $0.screenSessionMode == .screensaver && $0.frame.contains(point)
+        }), let id = win.targetScreenID else {
+            stopPlaying()
+            return
+        }
+        stopPlayingOnScreen(id: id)
+    }
+
     func stopPlayingOnScreen(id: String) {
         guard let idx = screensaverWindows.firstIndex(where: { $0.targetScreenID == id }) else { return }
         let win = screensaverWindows.remove(at: idx)
@@ -322,6 +359,10 @@ extension AppDelegate {
                 inputMonitor?.stop()
                 inputMonitor = nil
             } else {
+                // Subset of displays still playing — show the cursor so the dismissed screen is usable.
+                if screensaverWins.count < NSScreen.screens.count {
+                    NSCursor.unhide()
+                }
                 let activeFrames = screensaverWins.map { $0.frame }
                 inputMonitor?.updateActiveFrames(activeFrames)
             }

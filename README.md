@@ -22,7 +22,8 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Photo Slideshow** | Built-in Ken Burns cinematic photo slideshow with smooth crossfading from `photos/` folder |
 | **GPU Hyperspace** | Built-in Metal fragment/compute shader running at 60/120 FPS with <1% CPU overhead |
 | **Web Wallpapers** | Interactive live HTML5 canvas & WebGL wallpapers from the `web/` folder via `WKWebView` |
-| **Per-Monitor Setup** | Assign different videos, effects, or web wallpapers to individual screens independently |
+| **Per-Monitor Setup** | Displays menu assigns a different clip or effect per screen. Click = screensaver, Option-click = ambient |
+| **Ranger Menu** | Now playing, Play, Displays, Overlays, Settings. Last-used screen. Version and update check at the bottom |
 | **Sequential Playlist** | Auto-advance through videos in sequence when playback ends, with seamless looping |
 | **Battery Saver Mode** | Automatic 30fps throttling when macOS Low Power Mode is active on battery |
 | **Customizable Clock** | 12-hour AM/PM vs 24-hour military time, seconds toggle, date toggle, 6 colors, 3 sizes |
@@ -47,7 +48,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
-> **v5.0.3 — Architecture & Multi-Monitor Release.** Clean modular architecture (26 source files in `src/`, 6,557 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Multi-Screen Input Isolation, and Low Power battery savings. Every feature remains 100% free and open-source.
+> **v5.0.3 — Ranger menu, per-monitor playback, per-screen dismiss.** Clean modular architecture (26 source files in `src/`). Click plays last-used screen, Option-click is ambient. Every feature remains 100% free and open-source.
 
 📖 **More docs:** [Multi-Monitor Architecture Guide](docs/MULTI_MONITOR_GUIDE.md) · [Full feature list & version history](docs/ABOUT.md) · [Complete changelog](docs/CHANGELOG.md)
 
@@ -72,9 +73,9 @@ bash build.sh
 
 HollywoodSaver lives in the menu bar (the top-right bar of your screen, next to Wi-Fi, battery, Spotlight, etc.).
 
-In **v5.0.1+**, the HollywoodSaver icon appears on **all connected screens simultaneously** (both your built-in display and any connected external monitors). You can click the icon from whichever screen you are actively working on.
+macOS pins the Ranger extra to the **Main** display (System Settings → Displays). On a laptop-plus-ultrawide layout the extra can still show up in the overflow (`>>`) or on the external bar.
 
-If you don't see it, check the menu bar on your **external monitor**.
+The menu is Now playing → Play → Displays → Overlays → Settings, with version and Quit at the bottom. Click a clip to play screensaver on the last screen you used. Option-click is ambient.
 
 ### Add Videos From Github
 
@@ -105,7 +106,7 @@ Looking for cool videos to use? Here are some great free sources:
 
 The real magic happens when you combine **Ambient Mode** with the **Opacity slider**. Lower the opacity and your video or effect plays *behind* all your windows — turning your desktop into a living, animated wallpaper.
 
-**Try this:** Select Matrix Rain > Ambient > All Screens, then reduce the opacity. Matrix code rains behind your Finder windows, your terminal, your browser — on every monitor. You keep working while your desktop looks like you're inside the Matrix.
+**Try this:** Play → Effects → Matrix Rain (Option-click for ambient), then lower Opacity in Settings. Matrix code rains behind your Finder windows, your terminal, your browser — on every monitor. You keep working while your desktop looks like you're inside the Matrix.
 
 This works with any media — videos, GIFs, and built-in effects all become live wallpapers. On a dual-monitor setup, both screens get the effect simultaneously.
 

@@ -339,15 +339,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     // MARK: - Helpers (DRY)
 
-    /// Resolve a screen preference ("all"/"builtin"/"external") to the matching `NSScreen` list.
+    /// Resolve a screen preference ("all"/"builtin"/"external"/screenIdentifier) to matching `NSScreen`s.
     func targetScreens(for preference: String) -> [NSScreen] {
         let screens = NSScreen.screens
         let builtIn = screens.first { $0.localizedName.contains("Built") }
         let externals = screens.filter { !$0.localizedName.contains("Built") }
         switch preference {
+        case "all": return screens
         case "builtin": return builtIn.map { [$0] } ?? screens
         case "external": return externals.isEmpty ? screens : externals
-        default: return screens
+        default:
+            if let match = screens.first(where: { $0.screenIdentifier == preference }) {
+                return [match]
+            }
+            return screens
         }
     }
 

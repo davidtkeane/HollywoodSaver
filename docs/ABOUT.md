@@ -1,6 +1,6 @@
 # About HollywoodSaver
 
-**Version:** 5.0.3 (Clean Status Bar & Multi-Monitor Guide)
+**Version:** 5.0.3 (Ranger Menu & Per-Screen Dismiss)
 **Platform:** macOS 15+ (Apple Silicon — M1/M2/M3/M4)
 **License:** MIT
 **Source:** 26 Swift files in `src/` (6,557 lines total), compiled with `swiftc` — no Xcode project
@@ -59,7 +59,7 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 
 | Version | Highlights |
 |---------|-----------|
-| **v5.0.3** | **Clean Status Bar & Multi-Monitor Guide** — Restored single clean status bar item; added comprehensive `MULTI_MONITOR_GUIDE.md` architecture reference. |
+| **v5.0.3** | **Ranger Menu & Per-Screen Dismiss** — Now playing / Play / Displays / Overlays / Settings menu; last-used screen + Option-click ambient; mouse/click stops one screen, Escape stops all; single status item; `MULTI_MONITOR_GUIDE.md`. |
 | **v5.0.2** | **Multi-Screen Input Isolation** — Intelligent screensaver coordinate filtering allowing work on laptop display while external display plays media uninterrupted. |
 | **v5.0.1** | **Feature & Performance Upgrade** — Added Metal GPU Hyperspace (<1% CPU), Interactive HTML5 Web Wallpapers, Per-Monitor media assignment, Sequential video playlists, Low Power battery savings, 12h/24h clock toggle, UNUserNotificationCenter notifications, and full modular 26-source file architecture (6,521 lines in `src/`). |
 | **v5.0.0** | **Architecture Refactor** — 3,599-line monolith split into modular source files in `src/`, with `docs/`/`images/`/`videos/`/`gifs/`/`photos/` folders. |

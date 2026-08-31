@@ -3,7 +3,8 @@ import Cocoa
 // MARK: - Input Monitor
 
 class InputMonitor {
-    var onDismiss: () -> Void
+    /// `nil` point means dismiss everything (Escape). A point means dismiss that screen only.
+    var onDismiss: (NSPoint?) -> Void
     var globalMonitor: Any?
     var localMonitor: Any?
     var initialMouseLocation: NSPoint?
@@ -13,7 +14,7 @@ class InputMonitor {
     var isDismissing = false
     var activeScreensaverFrames: [NSRect] = []
 
-    init(activeFrames: [NSRect] = [], onDismiss: @escaping () -> Void) {
+    init(activeFrames: [NSRect] = [], onDismiss: @escaping (NSPoint?) -> Void) {
         self.activeScreensaverFrames = activeFrames
         self.onDismiss = onDismiss
     }
@@ -52,14 +53,13 @@ class InputMonitor {
 
         switch event.type {
         case .keyDown:
-            if event.keyCode == 53 { // Escape key always dismisses
-                dismiss()
+            if event.keyCode == 53 { // Escape still stops every screen
+                dismissAll()
             }
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             let mousePt = NSEvent.mouseLocation
-            // Only dismiss if the click happened on a screen running the screensaver
             if isPointOnScreensaver(mousePt) {
-                dismiss()
+                dismissAt(mousePt)
             }
         case .mouseMoved, .scrollWheel:
             let now = CACurrentMediaTime()
@@ -69,7 +69,6 @@ class InputMonitor {
             }
 
             let current = NSEvent.mouseLocation
-            // If mouse is on another screen where user is actively working, ignore movement
             guard isPointOnScreensaver(current) else {
                 initialMouseLocation = current
                 return
@@ -83,16 +82,23 @@ class InputMonitor {
             let dx = abs(current.x - initial.x)
             let dy = abs(current.y - initial.y)
             if hypot(dx, dy) > movementThreshold {
-                dismiss()
+                dismissAt(current)
             }
         default:
             break
         }
     }
 
-    func dismiss() {
+    func dismissAll() {
         isDismissing = true
-        onDismiss()
+        onDismiss(nil)
+    }
+
+    func dismissAt(_ point: NSPoint) {
+        onDismiss(point)
+        // Reset so sliding onto a neighbouring screensaver does not instantly kill it too.
+        initialMouseLocation = NSEvent.mouseLocation
+        startTime = CACurrentMediaTime()
     }
 
     func stop() {

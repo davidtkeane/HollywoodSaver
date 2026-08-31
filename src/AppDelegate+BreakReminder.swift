@@ -292,7 +292,7 @@ extension AppDelegate {
 
         // Set up input monitoring to dismiss on click/key/mouse
         if inputMonitor == nil {
-            inputMonitor = InputMonitor { [weak self] in
+            inputMonitor = InputMonitor { [weak self] _ in
                 self?.dismissBreakScreen()
             }
         }

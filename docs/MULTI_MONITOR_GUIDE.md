@@ -66,11 +66,11 @@ func isPointOnScreensaver(_ point: NSPoint) -> Bool {
 #### Event Handling Rules:
 | Event Type | Condition | Action |
 |---|---|---|
-| **Escape Key (`keyCode == 53`)** | Always | Dismisses screensaver immediately |
-| **Mouse Click (`left/right/other`)** | Inside screensaver frame | Dismisses screensaver |
-| **Mouse Click (`left/right/other`)** | On user's working screen | **Ignored** (User continues working) |
-| **Mouse Movement / Scroll** | Inside screensaver frame (> 20pt) | Dismisses screensaver |
-| **Mouse Movement / Scroll** | On user's working screen | **Ignored** (User continues working) |
+| **Escape Key (`keyCode == 53`)** | Always | Dismisses **every** screensaver screen |
+| **Mouse Click (`left/right/other`)** | Inside a screensaver frame | Dismisses **that screen only** |
+| **Mouse Click (`left/right/other`)** | On user's working / idle screen | **Ignored** |
+| **Mouse Movement / Scroll** | Inside a screensaver frame (> 20pt) | Dismisses **that screen only** |
+| **Mouse Movement / Scroll** | On user's working / idle screen | **Ignored** |
 
 ### 3.3 Conditional Focus & Cursor Management (`AppDelegate+Playback.swift`)
 When playback starts:
@@ -82,6 +82,8 @@ When playback starts:
 - If screensaver is assigned to **a subset of displays** (e.g. external only):
   - `NSCursor.hide()` is **bypassed** (cursor remains visible on working display).
   - `NSApp.activate` is **bypassed** (active code editors/browsers retain focus).
+
+When several screens are playing, mouse/click still maps to one frame via `stopPlayingOnScreen(id:)`. A 0.5s grace after each per-screen dismiss stops a cross-monitor swipe from killing the neighbour. Escape remains the global stop.
 
 ---
 
@@ -113,11 +115,11 @@ class ScreensaverWindow: NSWindow {
 This allows granular teardown via `stopPlayingOnScreen(id:)` without tearing down or interrupting media playing on adjacent screens.
 
 ### 4.3 Multi-Monitor Controller Submenu (`AppDelegate+Menu.swift`)
-When 2 or more screens are connected, the top-level menu displays **Displays (N)**:
+When 2 or more screens are connected, the top-level menu shows **Displays**:
 - Real-time status per display (`● Playing: Video Title` vs `○ Idle`).
-- Direct action items:
-  - Play specific video/effect on Display N.
-  - Stop playback on Display N.
+- Click a clip or effect to play screensaver on that display; Option-click is ambient (no Screensaver/Ambient third level).
+- Stop This Display tears down only that screen.
+- Play (root) uses `Prefs.lastPlayScreen` (all / builtin / external / a stored `screenIdentifier`). Missing or unplugged IDs fall back to all screens.
 
 ### 4.4 Display-change restore
 `NSApplication.didChangeScreenParametersNotification` used to call `startPlaying(media: currentMediaPath, on: NSScreen.screens)`, which cloned the last-started file onto every display and wiped per-monitor assignments.
@@ -152,6 +154,6 @@ It now snapshots each window's `screenSessionMedia` / `screenSessionMode` / `tar
 |---|---|---|---|
 | **Status Bar Icon** | Main Screen | Main Screen | Main Screen |
 | **Cursor Hiding** | Hidden (Screensaver) | Visible on Work Screen | Hidden |
-| **Mouse Dismissal** | Global | Isolated to Media Screen | Global |
+| **Mouse Dismissal** | That screen | Isolated to that media screen | That screen (Esc = all) |
 | **Typing Dismissal** | Escape Only | Escape Only | Escape Only |
 | **Independent Stop** | Main Stop | Stop per Display | Stop All |
