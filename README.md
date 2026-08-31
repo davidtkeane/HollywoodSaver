@@ -47,7 +47,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Secure Auto-Update** | Downloads pre-built releases from GitHub with SHA-256 checksum verification — no code compilation on your machine |
 | **Contribute** | Buy Me a Coffee or Hodl H3LLCOIN — support the project from the menu |
 
-> **v5.0.3 — Architecture & Multi-Monitor Release.** Clean modular architecture (26 source files in `src/`, 6,521 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Multi-Screen Input Isolation, and Low Power battery savings. Every feature remains 100% free and open-source.
+> **v5.0.3 — Architecture & Multi-Monitor Release.** Clean modular architecture (26 source files in `src/`, 6,557 lines of code). Features Metal GPU Hyperspace, Interactive Web Wallpapers, Per-Monitor media assignment, Multi-Screen Input Isolation, and Low Power battery savings. Every feature remains 100% free and open-source.
 
 📖 **More docs:** [Multi-Monitor Architecture Guide](docs/MULTI_MONITOR_GUIDE.md) · [Full feature list & version history](docs/ABOUT.md) · [Complete changelog](docs/CHANGELOG.md)
 
@@ -163,9 +163,9 @@ HollywoodSaver/
   README.md               # You are here
   build.sh                # Build script — creates the .app bundle
   run.sh                  # Launcher with terminal info
-  src/                    # Swift source (17 files, ~5750 lines total)
+  src/                    # Swift source (26 files, 6,557 lines total)
     main.swift              # App startup
-    AppDelegate.swift       # Main controller (~2900 lines)
+    AppDelegate.swift       # Main controller + version constant (bump appVersion here only)
     Prefs.swift             # UserDefaults wrapper
     MatrixConfig.swift      # Matrix Rain config enums
     MatrixRainView.swift    # Matrix Rain rendering
@@ -186,7 +186,7 @@ HollywoodSaver/
     thematrix.png           # Matrix Rain screenshot
   docs/                   # Project documentation
     ABOUT.md                # Full feature list + version history
-    CHANGELOG.md            # All release notes v1.0 → v5.0
+    CHANGELOG.md            # All release notes v1.0 → v5.0.3
   videos/                 # Drop .mp4, .mov, .m4v files here
   gifs/                   # Drop .gif files here
   photos/                 # Drop .jpg, .png, .heic files here (slideshow)

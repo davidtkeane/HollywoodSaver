@@ -1,15 +1,15 @@
 # About HollywoodSaver
 
-**Version:** 5.0.0 (Architecture Refactor — same feature set, modular codebase)
+**Version:** 5.0.3 (Clean Status Bar & Multi-Monitor Guide)
 **Platform:** macOS 15+ (Apple Silicon — M1/M2/M3/M4)
 **License:** MIT
-**Source:** 17 Swift files in `src/` (~5,750 lines total), compiled with `swiftc` — no Xcode project
+**Source:** 26 Swift files in `src/` (6,557 lines total), compiled with `swiftc` — no Xcode project
 
 ---
 
 ## What is HollywoodSaver?
 
-HollywoodSaver is a native macOS menu bar app that turns your Mac into a video screensaver and **live wallpaper engine**. Play looping videos, GIFs, and built-in effects fullscreen — or run them behind your windows as a living desktop. Built with pure Swift across 17 modular files, no Xcode project needed.
+HollywoodSaver is a native macOS menu bar app that turns your Mac into a video screensaver and **live wallpaper engine**. Play looping videos, GIFs, and built-in effects fullscreen — or run them behind your windows as a living desktop. Built with pure Swift across 26 modular files, no Xcode project needed.
 
 ---
 
@@ -86,7 +86,7 @@ HollywoodSaver is a native macOS menu bar app that turns your Mac into a video s
 ## Technical Details
 
 **Built with:**
-- Swift 6+ (17 modular files in `src/`)
+- Swift 6+ (26 modular files in `src/`)
 - AVFoundation (video playback)
 - Cocoa (macOS UI)
 - QuartzCore / Core Text (Matrix Rain rendering)
