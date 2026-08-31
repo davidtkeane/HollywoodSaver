@@ -39,6 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var pomodoroActive = false
     var pomodoroOnBreak = false
     var currentMediaPath: String?
+    var screenChangeWorkItem: DispatchWorkItem?
     var savedMediaBeforeBreak: String?
     var savedModeBeforeBreak: PlayMode?
     var sleepTimer: Timer?
@@ -267,6 +268,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     @objc func handleScreenParametersChanged() {
+        // This notification can fire in bursts on hotplug/resolution change.
+        screenChangeWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.applyScreenParameterChange()
+        }
+        screenChangeWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    func applyScreenParameterChange() {
         if !clockWindows.isEmpty {
             restartClockIfActive()
         }
@@ -282,9 +293,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         if !rainBehindWindows.isEmpty {
             startRainBehind()
         }
-        if isPlaying, let media = currentMediaPath, let mode = currentMode {
-            startPlaying(media: media, on: NSScreen.screens, mode: mode)
-        }
+        restorePerMonitorPlaybackAfterDisplayChange()
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {

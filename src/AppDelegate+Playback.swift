@@ -245,6 +245,63 @@ extension AppDelegate {
         }
     }
 
+    /// Re-apply each window's own media/mode after hotplug or resolution change.
+    /// The old path cloned `currentMediaPath` onto every screen and wiped per-monitor assignments.
+    func restorePerMonitorPlaybackAfterDisplayChange() {
+        guard isPlaying else { return }
+
+        let snapshot: [(id: String, media: String, mode: PlayMode)] = screensaverWindows.compactMap { win in
+            guard let id = win.targetScreenID,
+                  let media = win.screenSessionMedia,
+                  let mode = win.screenSessionMode else { return nil }
+            return (id, media, mode)
+        }
+
+        func screenMatching(storedID: String) -> NSScreen? {
+            let screens = NSScreen.screens
+            if let exact = screens.first(where: { $0.screenIdentifier == storedID }) {
+                return exact
+            }
+            if let idx = storedID.firstIndex(of: "_") {
+                let name = String(storedID[storedID.index(after: idx)...])
+                let matches = screens.filter { $0.localizedName == name }
+                if matches.count == 1 { return matches[0] }
+                return matches.first
+            }
+            return screens.first(where: { $0.localizedName == storedID })
+        }
+
+        var plan: [(screen: NSScreen, media: String, mode: PlayMode)] = []
+        var seen = Set<String>()
+        for item in snapshot {
+            guard let screen = screenMatching(storedID: item.id) else { continue }
+            let liveID = screen.screenIdentifier
+            if seen.contains(liveID) { continue }
+            seen.insert(liveID)
+            plan.append((screen, item.media, item.mode))
+        }
+
+        if plan.isEmpty {
+            if let media = currentMediaPath, let mode = currentMode {
+                startPlaying(media: media, on: NSScreen.screens, mode: mode)
+            }
+            return
+        }
+
+        // Tear down existing windows without `stopPlaying()` so we keep currentMode.
+        for cv in contentViews { cv.stopPlayback() }
+        for w in screensaverWindows { w.orderOut(nil) }
+        screensaverWindows.removeAll()
+        contentViews.removeAll()
+        inputMonitor?.stop()
+        inputMonitor = nil
+
+        for item in plan {
+            startPlaying(media: item.media, on: [item.screen], mode: item.mode)
+        }
+        // Newly attached screens with no prior assignment stay idle.
+    }
+
     func stopPlayingOnScreen(id: String) {
         guard let idx = screensaverWindows.firstIndex(where: { $0.targetScreenID == id }) else { return }
         let win = screensaverWindows.remove(at: idx)

@@ -119,6 +119,11 @@ When 2 or more screens are connected, the top-level menu displays **Displays (N)
   - Play specific video/effect on Display N.
   - Stop playback on Display N.
 
+### 4.4 Display-change restore
+`NSApplication.didChangeScreenParametersNotification` used to call `startPlaying(media: currentMediaPath, on: NSScreen.screens)`, which cloned the last-started file onto every display and wiped per-monitor assignments.
+
+It now snapshots each window's `screenSessionMedia` / `screenSessionMode` / `targetScreenID`, rematches live `NSScreen`s (exact ID, then display name), recreates only those screens, and leaves newly attached displays idle instead of cloning. The handler is debounced (~350ms) because macOS fires the notification in bursts.
+
 ---
 
 ## 5. Release & Auto-Update Architecture
