@@ -66,6 +66,19 @@ extension AppDelegate {
             menu.addItem(statusItem)
         }
 
+        // Video audio mute is easy to miss in Settings. Surface it here while
+        // a real video (not Matrix/Starfield) is playing. Default is Off.
+        if contentViews.contains(where: { $0 is VideoPlayerView }) {
+            let soundOn = Prefs.soundEnabled
+            let soundItem = NSMenuItem(
+                title: soundOn ? "Sound On" : "Sound Off",
+                action: #selector(toggleSound),
+                keyEquivalent: ""
+            )
+            soundItem.state = soundOn ? .on : .off
+            menu.addItem(soundItem)
+        }
+
         if resolved.count == 1 {
             if let screen = resolved[0].screen {
                 let stopThis = NSMenuItem(title: "Stop This Screen", action: #selector(stopPlayingOnScreenAction(_:)), keyEquivalent: "")
