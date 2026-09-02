@@ -67,6 +67,22 @@ fi
 echo ""
 echo -e "${BLUE}Building app bundle...${NC}"
 
+# Quit a running copy first. Otherwise `rm -rf` deletes the bundle under a live
+# process, and the `open` at the end just activates that old instance.
+if pgrep -x HollywoodSaver >/dev/null 2>&1; then
+    echo "  Quitting running HollywoodSaver..."
+    killall HollywoodSaver 2>/dev/null || true
+    for _ in 1 2 3 4 5 6 7 8; do
+        pgrep -x HollywoodSaver >/dev/null 2>&1 || break
+        sleep 0.25
+    done
+    if pgrep -x HollywoodSaver >/dev/null 2>&1; then
+        echo -e "  ${YELLOW}⚠️${NC}  Still running — you may need to Quit from the menu"
+    else
+        echo -e "  ${GREEN}✅${NC} Quit"
+    fi
+fi
+
 # Clean previous build
 if [ -d "$APP_DIR" ]; then
     echo "  Removing previous build..."

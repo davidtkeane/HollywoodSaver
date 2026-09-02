@@ -22,6 +22,30 @@ extension AppDelegate {
         startPlaying(media: pair.0, on: pair.1, mode: .screensaver)
     }
 
+    func resolvedLastPlayedMedia() -> String? {
+        guard let filename = Prefs.lastMediaFilename, !filename.isEmpty else { return nil }
+        let sentinels = [
+            AppDelegate.matrixRainSentinel,
+            AppDelegate.starfieldWarpSentinel,
+            AppDelegate.photoSlideshowSentinel,
+            AppDelegate.metalHyperspaceSentinel
+        ]
+        if sentinels.contains(filename) { return filename }
+        if let match = findMedia().first(where: { ($0 as NSString).lastPathComponent == filename }) {
+            return match
+        }
+        return findWebWallpapers().map { $0.path }.first { ($0 as NSString).lastPathComponent == filename }
+    }
+
+    /// Replay last clip on last screen(s). Option-click = ambient.
+    @objc func playLastPlayed() {
+        guard let media = resolvedLastPlayedMedia() else { return }
+        let optionAmbient = NSEvent.modifierFlags.contains(.option)
+        let savedAmbient = Prefs.lastPlayMode == "ambient"
+        let mode: PlayMode = (optionAmbient || savedAmbient) ? .ambient : .screensaver
+        startPlaying(media: media, on: targetScreens(for: Prefs.lastPlayScreen ?? "all"), mode: mode)
+    }
+
     /// Play on last-used screen(s). Click = screensaver, Option-click = ambient.
     @objc func playMediaDefault(_ sender: NSMenuItem) {
         guard let file = sender.representedObject as? String else { return }

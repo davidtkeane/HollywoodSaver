@@ -2,6 +2,17 @@
 
 All notable changes to HollywoodSaver are documented here.
 
+## [Unreleased] - 2026-09-02 — Last Played & Build Relaunch
+
+### Added
+- **Last Played** — when nothing is running, a one-click item sits above Play and restarts the last clip/effect on the last screen(s). Option-click is still ambient. Hidden while Now Playing is up. Shows Last Played (missing) if the file is gone.
+
+### Changed
+- **Stay-open Settings** — Sound, Loop, Sequential Playlist, Battery Saver, Auto Play, Launch at Login, Dock, and Desktop Shortcut use ToggleMenuItemView, so ticking them does not dismiss the menu. Same for the Now Playing sound toggle while a video is playing. Play/Displays still close the menu (screensaver sits above the bar).
+- **build.sh relaunch** — if HollywoodSaver is already running, the script quits it before deleting the bundle, then run.sh opens the new binary. Matches the in-app updater quit-and-reopen, which open alone did not do.
+
+---
+
 ## [5.0.4] - 2026-08-31 — Ranger Menu & Per-Screen Dismiss
 
 ### Added

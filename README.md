@@ -13,7 +13,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **Ambient Mode** | Play on any screen while you keep working — built-in, external, or all |
 | **Multi-Screen** | Built-in, external, all screens — your choice |
 | **Video + GIF** | Supports `.mp4`, `.mov`, `.m4v`, and `.gif` files |
-| **Volume Slider** | Adjustable volume with mute toggle |
+| **Volume Slider** | Adjustable volume with mute toggle (defaults off; Sound Off/On while a video plays) |
 | **Opacity Slider** | Fade the video in ambient mode to see your desktop through it |
 | **Loop** | Toggle looping on/off — play forever or just once |
 | **Matrix Rain** | Built-in Matrix digital rain effect — no video file needed |
@@ -23,7 +23,7 @@ A native macOS menu bar app that turns your Mac into a video screensaver and **l
 | **GPU Hyperspace** | Built-in Metal fragment/compute shader running at 60/120 FPS with <1% CPU overhead |
 | **Web Wallpapers** | Interactive live HTML5 canvas & WebGL wallpapers from the `web/` folder via `WKWebView` |
 | **Per-Monitor Setup** | Displays menu assigns a different clip or effect per screen. Click = screensaver, Option-click = ambient |
-| **Ranger Menu** | Now playing, Play, Displays, Overlays, Settings. Last-used screen. Version and update check at the bottom |
+| **Ranger Menu** | Now playing, Last Played, Play, Displays, Overlays, Settings. Last-used screen. Version and update check at the bottom |
 | **Sequential Playlist** | Auto-advance through videos in sequence when playback ends, with seamless looping |
 | **Battery Saver Mode** | Automatic 30fps throttling when macOS Low Power Mode is active on battery |
 | **Customizable Clock** | 12-hour AM/PM vs 24-hour military time, seconds toggle, date toggle, 6 colors, 3 sizes |
@@ -67,7 +67,7 @@ cd HollywoodSaver
 bash build.sh
 ```
 
-`bash build.sh` does everything — compiles the app, generates the icon, and automatically launches it. No need to run `run.sh` separately.
+`bash build.sh` compiles the app, generates the icon, quits a running copy, and launches the new binary. No need to run `run.sh` separately.
 
 ### Where is the icon?
 
@@ -75,7 +75,7 @@ HollywoodSaver lives in the menu bar (the top-right bar of your screen, next to 
 
 macOS pins the Ranger extra to the **Main** display (System Settings → Displays). On a laptop-plus-ultrawide layout the extra can still show up in the overflow (`>>`) or on the external bar.
 
-The menu is Now playing → Play → Displays → Overlays → Settings, with version and Quit at the bottom. Click a clip to play screensaver on the last screen you used. Option-click is ambient.
+The menu is Now playing → Last Played → Play → Displays → Overlays → Settings, with version and Quit at the bottom. After you dismiss a clip, Last Played one-clicks the same thing on the same screen. Click a clip in Play to pick something new (last-used screen). Option-click is ambient. Settings checkboxes stay open until you move off the menu.
 
 ### Add Videos From Github
 
@@ -139,7 +139,7 @@ Click the helmet icon (or play icon) in your menu bar to see all your videos lis
 
 All settings are in the dropdown menu and persist between restarts:
 
-- **Sound** — toggle audio on/off
+- **Sound** — toggle audio on/off (menu stays open; default is muted)
 - **Volume** — drag the slider
 - **Opacity** — transparency for ambient mode
 - **Rain Effects** — rain behind windows, over windows, or both (with separate opacity sliders)

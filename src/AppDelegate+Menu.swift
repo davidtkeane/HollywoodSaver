@@ -9,6 +9,7 @@ extension AppDelegate {
         menu.delegate = self
 
         addNowPlayingItems(to: menu)
+        addLastPlayedItem(to: menu)
 
         let media = findMedia()
         let screens = NSScreen.screens
@@ -69,14 +70,14 @@ extension AppDelegate {
         // Video audio mute is easy to miss in Settings. Surface it here while
         // a real video (not Matrix/Starfield) is playing. Default is Off.
         if contentViews.contains(where: { $0 is VideoPlayerView }) {
-            let soundOn = Prefs.soundEnabled
-            let soundItem = NSMenuItem(
-                title: soundOn ? "Sound On" : "Sound Off",
-                action: #selector(toggleSound),
-                keyEquivalent: ""
-            )
-            soundItem.state = soundOn ? .on : .off
-            menu.addItem(soundItem)
+            addStayOpenToggle(to: menu, title: Prefs.soundEnabled ? "Sound On" : "Sound Off", isOn: Prefs.soundEnabled) { on in
+                Prefs.soundEnabled = on
+                for cv in self.contentViews {
+                    if let vp = cv as? VideoPlayerView {
+                        vp.queuePlayer.isMuted = !on
+                    }
+                }
+            }
         }
 
         if resolved.count == 1 {
@@ -97,6 +98,50 @@ extension AppDelegate {
         let stopAll = NSMenuItem(title: "Stop All", action: #selector(stopPlaying), keyEquivalent: "")
         menu.addItem(stopAll)
         menu.addItem(NSMenuItem.separator())
+    }
+
+    /// One-click replay of the last clip/effect on the last screen(s).
+    /// Hidden while something is already playing (Now Playing covers that)
+    /// and when there is no saved last item.
+    func addLastPlayedItem(to menu: NSMenu) {
+        guard screensaverWindows.isEmpty else { return }
+        guard let filename = Prefs.lastMediaFilename, !filename.isEmpty else { return }
+        guard let media = resolvedLastPlayedMedia() else {
+            let missing = NSMenuItem(title: "Last Played (missing)", action: nil, keyEquivalent: "")
+            missing.isEnabled = false
+            menu.addItem(missing)
+            return
+        }
+
+        let name = friendlyMediaName(for: media)
+        let screen = lastPlayedScreenLabel()
+        let mode = Prefs.lastPlayMode == "ambient" ? " · Ambient" : ""
+        let item = NSMenuItem(
+            title: "Last Played: \(name) — \(screen)\(mode)",
+            action: #selector(playLastPlayed),
+            keyEquivalent: ""
+        )
+        menu.addItem(item)
+    }
+
+    func lastPlayedScreenLabel() -> String {
+        let pref = Prefs.lastPlayScreen ?? "all"
+        switch pref {
+        case "all": return "All Displays"
+        case "builtin": return "Built-in"
+        case "external": return "External"
+        default:
+            if let match = NSScreen.screens.first(where: { $0.screenIdentifier == pref }) {
+                return match.localizedName
+            }
+            return "Last Display"
+        }
+    }
+
+    func addStayOpenToggle(to menu: NSMenu, title: String, isOn: Bool, onToggle: @escaping (Bool) -> Void) {
+        let item = NSMenuItem()
+        item.view = ToggleMenuItemView(title: title, isOn: isOn, onToggle: onToggle)
+        menu.addItem(item)
     }
 
     func friendlyMediaName(for path: String) -> String {
@@ -260,9 +305,14 @@ extension AppDelegate {
     func makeSettingsMenu() -> NSMenu {
         let menu = NSMenu(title: "Settings")
 
-        let soundItem = NSMenuItem(title: "Sound", action: #selector(toggleSound), keyEquivalent: "")
-        soundItem.state = Prefs.soundEnabled ? .on : .off
-        menu.addItem(soundItem)
+        addStayOpenToggle(to: menu, title: "Sound", isOn: Prefs.soundEnabled) { on in
+            Prefs.soundEnabled = on
+            for cv in self.contentViews {
+                if let vp = cv as? VideoPlayerView {
+                    vp.queuePlayer.isMuted = !on
+                }
+            }
+        }
 
         let volumeView = SliderMenuView(title: "Volume", minValue: 0, maxValue: 1, currentValue: Double(Prefs.volume)) { newVal in
             Prefs.volume = newVal
@@ -288,33 +338,23 @@ extension AppDelegate {
         opacityMenuItem.view = opacityView
         menu.addItem(opacityMenuItem)
 
-        let loopItem = NSMenuItem(title: "Loop", action: #selector(toggleLoop), keyEquivalent: "")
-        loopItem.state = Prefs.loopEnabled ? .on : .off
-        menu.addItem(loopItem)
+        addStayOpenToggle(to: menu, title: "Loop", isOn: Prefs.loopEnabled) { Prefs.loopEnabled = $0 }
+        addStayOpenToggle(to: menu, title: "Sequential Playlist", isOn: Prefs.playlistMode) { Prefs.playlistMode = $0 }
+        addStayOpenToggle(to: menu, title: "Battery Saver (30fps)", isOn: Prefs.lowPowerModeEnabled) { Prefs.lowPowerModeEnabled = $0 }
+        addStayOpenToggle(to: menu, title: "Auto Play on Launch", isOn: Prefs.autoPlayEnabled) { Prefs.autoPlayEnabled = $0 }
 
-        let playlistToggle = NSMenuItem(title: "Sequential Playlist", action: #selector(togglePlaylistMode), keyEquivalent: "")
-        playlistToggle.state = Prefs.playlistMode ? .on : .off
-        menu.addItem(playlistToggle)
-
-        let lowPowerToggle = NSMenuItem(title: "Battery Saver (30fps)", action: #selector(toggleLowPowerMode), keyEquivalent: "")
-        lowPowerToggle.state = Prefs.lowPowerModeEnabled ? .on : .off
-        menu.addItem(lowPowerToggle)
-
-        let autoPlayItem = NSMenuItem(title: "Auto Play on Launch", action: #selector(toggleAutoPlay), keyEquivalent: "")
-        autoPlayItem.state = Prefs.autoPlayEnabled ? .on : .off
-        menu.addItem(autoPlayItem)
-
-        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        loginItem.state = Prefs.launchAtLogin ? .on : .off
-        menu.addItem(loginItem)
-
-        let dockItem = NSMenuItem(title: "Show in Dock", action: #selector(toggleDockIcon), keyEquivalent: "")
-        dockItem.state = Prefs.showDockIcon ? .on : .off
-        menu.addItem(dockItem)
-
-        let desktopItem = NSMenuItem(title: "Desktop Shortcut", action: #selector(toggleDesktopShortcut), keyEquivalent: "")
-        desktopItem.state = Prefs.showDesktopShortcut ? .on : .off
-        menu.addItem(desktopItem)
+        addStayOpenToggle(to: menu, title: "Launch at Login", isOn: Prefs.launchAtLogin) { on in
+            if Prefs.launchAtLogin == on { return }
+            self.toggleLaunchAtLogin()
+        }
+        addStayOpenToggle(to: menu, title: "Show in Dock", isOn: Prefs.showDockIcon) { on in
+            if Prefs.showDockIcon == on { return }
+            self.toggleDockIcon()
+        }
+        addStayOpenToggle(to: menu, title: "Desktop Shortcut", isOn: Prefs.showDesktopShortcut) { on in
+            if Prefs.showDesktopShortcut == on { return }
+            self.toggleDesktopShortcut()
+        }
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(makeMatrixSettingsItem())

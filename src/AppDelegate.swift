@@ -219,6 +219,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let isBuiltIn = filename == AppDelegate.matrixRainSentinel
                          || filename == AppDelegate.starfieldWarpSentinel
                          || filename == AppDelegate.photoSlideshowSentinel
+                         || filename == AppDelegate.metalHyperspaceSentinel
             if isBuiltIn {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self.startPlaying(media: filename, on: NSScreen.screens, mode: mode)
