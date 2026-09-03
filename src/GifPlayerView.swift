@@ -11,6 +11,7 @@ class GifPlayerView: NSView, ScreensaverContent {
     var currentFrame = 0
     var elapsed: Double = 0
     var lastTimestamp: Double = 0
+    var lowPowerAccumulator: Double = 0
 
     init(frame: NSRect, gifURL: URL) {
         super.init(frame: frame)
@@ -52,6 +53,7 @@ class GifPlayerView: NSView, ScreensaverContent {
         currentFrame = 0
         elapsed = 0
         lastTimestamp = 0
+        lowPowerAccumulator = 0
 
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
         guard let link = displayLink else { return }
@@ -68,7 +70,17 @@ class GifPlayerView: NSView, ScreensaverContent {
                 view.lastTimestamp = timestamp
                 view.elapsed += dt
 
-                if view.elapsed >= view.frames[view.currentFrame].delay {
+                var skipDraw = false
+                if Prefs.batterySaverActive {
+                    view.lowPowerAccumulator += dt
+                    if view.lowPowerAccumulator < (1.0 / 30.0) {
+                        skipDraw = true
+                    } else {
+                        view.lowPowerAccumulator = 0
+                    }
+                }
+
+                if !skipDraw, view.elapsed >= view.frames[view.currentFrame].delay {
                     view.elapsed -= view.frames[view.currentFrame].delay
                     view.currentFrame = (view.currentFrame + 1) % view.frames.count
                     let frame = view.frames[view.currentFrame]

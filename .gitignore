@@ -1,4 +1,5 @@
 # Build output
+.hs-build.app/
 HollywoodSaver.app/
 *.iconset/
 compress_gif.sh

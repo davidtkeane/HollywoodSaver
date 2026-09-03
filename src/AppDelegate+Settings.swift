@@ -30,6 +30,23 @@ extension AppDelegate {
 
     @objc func toggleLowPowerMode() {
         Prefs.lowPowerModeEnabled = !Prefs.lowPowerModeEnabled
+        applyBatterySaverToRunningViews()
+    }
+
+    func applyBatterySaverToRunningViews() {
+        let fps = Prefs.batterySaverActive ? 30 : 60
+        for cv in contentViews {
+            if let metal = cv as? MetalWarpView {
+                metal.mtkView?.preferredFramesPerSecond = fps
+            }
+        }
+    }
+
+    @objc func openMediaFolder(_ sender: NSMenuItem) {
+        let sub = sender.representedObject as? String ?? ""
+        let path = sub.isEmpty ? appFolder : (appFolder as NSString).appendingPathComponent(sub)
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     @objc func toggleClock24h() {

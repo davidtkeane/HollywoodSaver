@@ -31,6 +31,7 @@ class MatrixRainView: NSView, ScreensaverContent {
     var displayLink: CVDisplayLink?
     var lastTimestamp: Double = 0
     var elapsed: Double = 0
+    var lowPowerAccumulator: Double = 0
     var characterPool: [Character] = []
     var flickerCounter = 0
 
@@ -104,6 +105,7 @@ class MatrixRainView: NSView, ScreensaverContent {
     func startPlayback() {
         lastTimestamp = 0
         elapsed = 0
+        lowPowerAccumulator = 0
 
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
         guard let link = displayLink else { return }
@@ -115,6 +117,21 @@ class MatrixRainView: NSView, ScreensaverContent {
             if view.lastTimestamp == 0 { view.lastTimestamp = timestamp }
             let dt = timestamp - view.lastTimestamp
             view.lastTimestamp = timestamp
+
+            if Prefs.batterySaverActive {
+                view.lowPowerAccumulator += dt
+                if view.lowPowerAccumulator < (1.0 / 30.0) {
+                    return kCVReturnSuccess
+                }
+                let stepDt = view.lowPowerAccumulator
+                view.lowPowerAccumulator = 0
+                DispatchQueue.main.async {
+                    if view.updateState(dt: stepDt) {
+                        view.setNeedsDisplay(view.bounds)
+                    }
+                }
+                return kCVReturnSuccess
+            }
 
             DispatchQueue.main.async {
                 if view.updateState(dt: dt) {

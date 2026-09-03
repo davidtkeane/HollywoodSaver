@@ -574,7 +574,7 @@ class StarfieldWarpView: NSView, ScreensaverContent {
             let dt = timestamp - view.lastTimestamp
             view.lastTimestamp = timestamp
 
-            let isLowPower = Prefs.lowPowerModeEnabled && ProcessInfo.processInfo.isLowPowerModeEnabled
+            let isLowPower = Prefs.batterySaverActive
             if isLowPower {
                 view.lowPowerAccumulator += dt
                 if view.lowPowerAccumulator < (1.0 / 30.0) {

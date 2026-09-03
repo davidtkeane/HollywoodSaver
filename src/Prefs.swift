@@ -42,6 +42,10 @@ class Prefs {
         get { defaults.object(forKey: "lowPowerModeEnabled") != nil ? defaults.bool(forKey: "lowPowerModeEnabled") : true }
         set { defaults.set(newValue, forKey: "lowPowerModeEnabled") }
     }
+    /// Pref toggle AND macOS Low Power Mode. Views should use this, not the pref alone.
+    static var batterySaverActive: Bool {
+        lowPowerModeEnabled && ProcessInfo.processInfo.isLowPowerModeEnabled
+    }
     static var clockFormat24h: Bool {
         get { defaults.bool(forKey: "clockFormat24h") }
         set { defaults.set(newValue, forKey: "clockFormat24h") }

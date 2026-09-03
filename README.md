@@ -140,6 +140,7 @@ Click the helmet icon (or play icon) in your menu bar to see all your videos lis
 All settings are in the dropdown menu and persist between restarts:
 
 - **Sound** — toggle audio on/off (menu stays open; default is muted)
+- **Open Media Folders** — Videos / GIFs / Photos / Web / app folder in Finder
 - **Volume** — drag the slider
 - **Opacity** — transparency for ambient mode
 - **Rain Effects** — rain behind windows, over windows, or both (with separate opacity sliders)

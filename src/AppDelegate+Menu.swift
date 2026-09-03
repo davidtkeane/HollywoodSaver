@@ -340,7 +340,10 @@ extension AppDelegate {
 
         addStayOpenToggle(to: menu, title: "Loop", isOn: Prefs.loopEnabled) { Prefs.loopEnabled = $0 }
         addStayOpenToggle(to: menu, title: "Sequential Playlist", isOn: Prefs.playlistMode) { Prefs.playlistMode = $0 }
-        addStayOpenToggle(to: menu, title: "Battery Saver (30fps)", isOn: Prefs.lowPowerModeEnabled) { Prefs.lowPowerModeEnabled = $0 }
+        addStayOpenToggle(to: menu, title: "Battery Saver (30fps)", isOn: Prefs.lowPowerModeEnabled) { on in
+            Prefs.lowPowerModeEnabled = on
+            self.applyBatterySaverToRunningViews()
+        }
         addStayOpenToggle(to: menu, title: "Auto Play on Launch", isOn: Prefs.autoPlayEnabled) { Prefs.autoPlayEnabled = $0 }
 
         addStayOpenToggle(to: menu, title: "Launch at Login", isOn: Prefs.launchAtLogin) { on in
@@ -357,6 +360,7 @@ extension AppDelegate {
         }
 
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(makeOpenMediaFoldersItem())
         menu.addItem(makeMatrixSettingsItem())
         menu.addItem(makeStarfieldSettingsItem())
         menu.addItem(makeSlideshowSettingsItem())
@@ -407,6 +411,25 @@ extension AppDelegate {
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    }
+
+    func makeOpenMediaFoldersItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Open Media Folders", action: nil, keyEquivalent: "")
+        let sub = NSMenu(title: "Open Media Folders")
+        let rows: [(String, String)] = [
+            ("Videos", "videos"),
+            ("GIFs", "gifs"),
+            ("Photos", "photos"),
+            ("Web", "web"),
+            ("App Folder", "")
+        ]
+        for (title, folder) in rows {
+            let row = NSMenuItem(title: title, action: #selector(openMediaFolder(_:)), keyEquivalent: "")
+            row.representedObject = folder
+            sub.addItem(row)
+        }
+        item.submenu = sub
+        return item
     }
 
     // MARK: - Matrix Settings (knobs only; play lives under Play/Displays)

@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-# Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
@@ -10,18 +9,17 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$SCRIPT_DIR/HollywoodSaver.app"
+STAGE_DIR="$SCRIPT_DIR/.hs-build.app"
 
-# Read version from Swift source (single source of truth)
 VERSION=$(grep -o 'appVersion = "[^"]*"' "$SCRIPT_DIR/src/AppDelegate.swift" | grep -o '"[^"]*"' | tr -d '"')
 if [ -z "$VERSION" ]; then
     echo -e "${RED}Error: Could not read appVersion from src/AppDelegate.swift${NC}"
     exit 1
 fi
 
-echo -e "${BLUE}🎬 Building HollywoodSaver v${VERSION}...${NC}"
+echo -e "${BLUE}Building HollywoodSaver v${VERSION}...${NC}"
 echo ""
 
-# Detect Apple Silicon chip
 CHIP=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Unknown")
 ARCH=$(uname -m)
 
@@ -29,72 +27,46 @@ echo -e "${BLUE}System Info:${NC}"
 echo "  CPU: $CHIP"
 echo "  Architecture: $ARCH"
 
-# Verify we're on Apple Silicon
 if [[ "$ARCH" != "arm64" ]]; then
-    echo -e "${RED}❌ Error: This app requires Apple Silicon (M1/M2/M3/M4)${NC}"
+    echo -e "${RED}Error: This app requires Apple Silicon (M1/M2/M3/M4)${NC}"
     echo "   Detected: $ARCH"
     exit 1
 fi
 
-# Verify required tools
 echo ""
 echo -e "${BLUE}Checking build tools...${NC}"
 
 if ! command -v swiftc &> /dev/null; then
-    echo -e "${RED}❌ Error: swiftc not found${NC}"
+    echo -e "${RED}Error: swiftc not found${NC}"
     echo "   Install Xcode Command Line Tools: xcode-select --install"
     exit 1
 fi
-echo -e "  ${GREEN}✅${NC} swiftc: $(swiftc --version | head -1)"
+echo -e "  ${GREEN}OK${NC} swiftc: $(swiftc --version | head -1)"
 
 if ! command -v sips &> /dev/null; then
-    echo -e "${RED}❌ Error: sips not found (macOS image tool)${NC}"
+    echo -e "${RED}Error: sips not found (macOS image tool)${NC}"
     exit 1
 fi
-echo -e "  ${GREEN}✅${NC} sips available"
+echo -e "  ${GREEN}OK${NC} sips available"
 
 if ! command -v iconutil &> /dev/null; then
-    echo -e "${RED}❌ Error: iconutil not found (macOS icon tool)${NC}"
+    echo -e "${RED}Error: iconutil not found (macOS icon tool)${NC}"
     exit 1
 fi
-echo -e "  ${GREEN}✅${NC} iconutil available"
+echo -e "  ${GREEN}OK${NC} iconutil available"
 
-# Check for ranger.png
 if [ ! -f "$SCRIPT_DIR/images/ranger.png" ]; then
-    echo -e "  ${YELLOW}⚠️${NC}  images/ranger.png not found (app will use default icon)"
+    echo -e "  ${YELLOW}WARN${NC}  images/ranger.png not found (app will use default icon)"
 fi
 
 echo ""
-echo -e "${BLUE}Building app bundle...${NC}"
+echo -e "${BLUE}Building into a staging bundle (live app left untouched)...${NC}"
 
-# Quit a running copy first. Otherwise `rm -rf` deletes the bundle under a live
-# process, and the `open` at the end just activates that old instance.
-if pgrep -x HollywoodSaver >/dev/null 2>&1; then
-    echo "  Quitting running HollywoodSaver..."
-    killall HollywoodSaver 2>/dev/null || true
-    for _ in 1 2 3 4 5 6 7 8; do
-        pgrep -x HollywoodSaver >/dev/null 2>&1 || break
-        sleep 0.25
-    done
-    if pgrep -x HollywoodSaver >/dev/null 2>&1; then
-        echo -e "  ${YELLOW}⚠️${NC}  Still running — you may need to Quit from the menu"
-    else
-        echo -e "  ${GREEN}✅${NC} Quit"
-    fi
-fi
+rm -rf "$STAGE_DIR"
+mkdir -p "$STAGE_DIR/Contents/MacOS"
+mkdir -p "$STAGE_DIR/Contents/Resources"
 
-# Clean previous build
-if [ -d "$APP_DIR" ]; then
-    echo "  Removing previous build..."
-    rm -rf "$APP_DIR"
-fi
-
-# Create .app bundle structure
-mkdir -p "$APP_DIR/Contents/MacOS"
-mkdir -p "$APP_DIR/Contents/Resources"
-
-# Write Info.plist
-cat > "$APP_DIR/Contents/Info.plist" << PLIST
+cat > "$STAGE_DIR/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -125,21 +97,16 @@ cat > "$APP_DIR/Contents/Info.plist" << PLIST
 </dict>
 </plist>
 PLIST
-echo -e "  ${GREEN}✅${NC} Info.plist created"
+echo -e "  ${GREEN}OK${NC} Info.plist created"
 
-# Write PkgInfo
-printf 'APPL????' > "$APP_DIR/Contents/PkgInfo"
-echo -e "  ${GREEN}✅${NC} PkgInfo created"
+printf 'APPL????' > "$STAGE_DIR/Contents/PkgInfo"
+echo -e "  ${GREEN}OK${NC} PkgInfo created"
 
-# Create app icon from ranger.png if available
 if [ -f "$SCRIPT_DIR/images/ranger.png" ]; then
     echo ""
     echo -e "${BLUE}Creating app icon...${NC}"
-
     ICONSET="$SCRIPT_DIR/HollywoodSaver.iconset"
     mkdir -p "$ICONSET"
-
-    # Generate all required icon sizes
     sips -z 16 16     "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_16x16.png" > /dev/null 2>&1
     sips -z 32 32     "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_16x16@2x.png" > /dev/null 2>&1
     sips -z 32 32     "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_32x32.png" > /dev/null 2>&1
@@ -150,28 +117,23 @@ if [ -f "$SCRIPT_DIR/images/ranger.png" ]; then
     sips -z 512 512   "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_256x256@2x.png" > /dev/null 2>&1
     sips -z 512 512   "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_512x512.png" > /dev/null 2>&1
     sips -z 1024 1024 "$SCRIPT_DIR/images/ranger.png" --out "$ICONSET/icon_512x512@2x.png" > /dev/null 2>&1
-
-    # Convert iconset to .icns
-    if iconutil -c icns "$ICONSET" -o "$APP_DIR/Contents/Resources/AppIcon.icns" 2>/dev/null; then
-        ICON_SIZE=$(du -h "$APP_DIR/Contents/Resources/AppIcon.icns" | awk '{print $1}')
-        echo -e "  ${GREEN}✅${NC} App icon created (${ICON_SIZE})"
+    if iconutil -c icns "$ICONSET" -o "$STAGE_DIR/Contents/Resources/AppIcon.icns" 2>/dev/null; then
+        ICON_SIZE=$(du -h "$STAGE_DIR/Contents/Resources/AppIcon.icns" | awk '{print $1}')
+        echo -e "  ${GREEN}OK${NC} App icon created (${ICON_SIZE})"
     else
-        echo -e "  ${YELLOW}⚠️${NC}  Icon creation failed, using default"
+        echo -e "  ${YELLOW}WARN${NC}  Icon creation failed, using default"
     fi
-
     rm -rf "$ICONSET"
 fi
 
-# Compile Swift code
 echo ""
 echo -e "${BLUE}Compiling Swift code...${NC}"
 echo "  Target: arm64-apple-macosx15.0 (M1/M3/M4)"
 
-# Gather all Swift source files from src/
 SWIFT_SOURCES=("$SCRIPT_DIR/src/"*.swift)
 echo "  Source files: ${#SWIFT_SOURCES[@]} files in src/"
 
-# Capture compilation output
+set +e
 COMPILE_OUTPUT=$(swiftc \
     -swift-version 5 \
     -target arm64-apple-macosx15.0 \
@@ -185,94 +147,111 @@ COMPILE_OUTPUT=$(swiftc \
     -framework WebKit \
     -framework Metal \
     -framework MetalKit \
-    -o "$APP_DIR/Contents/MacOS/HollywoodSaver" \
+    -o "$STAGE_DIR/Contents/MacOS/HollywoodSaver" \
     "${SWIFT_SOURCES[@]}" 2>&1)
+COMPILE_STATUS=$?
+set -e
 
-# Check for errors (not warnings)
-if echo "$COMPILE_OUTPUT" | grep -q "error:"; then
-    echo -e "${RED}❌ Compilation failed:${NC}"
+if [ "$COMPILE_STATUS" -ne 0 ] || echo "$COMPILE_OUTPUT" | grep -q "error:"; then
+    echo -e "${RED}Compilation failed (live app was not touched):${NC}"
     echo "$COMPILE_OUTPUT"
+    rm -rf "$STAGE_DIR"
     exit 1
 fi
 
-# Count warnings
-WARNING_COUNT=$(echo "$COMPILE_OUTPUT" | grep -c "warning:" || echo "0")
+WARNING_COUNT=$(echo "$COMPILE_OUTPUT" | grep -c "warning:" || true)
+WARNING_COUNT=${WARNING_COUNT:-0}
 
 if [ "$WARNING_COUNT" -gt 0 ]; then
-    echo -e "  ${YELLOW}⚠️${NC}  Compiled with $WARNING_COUNT warnings (macOS 15 deprecations)"
+    echo -e "  ${YELLOW}WARN${NC}  Compiled with $WARNING_COUNT warnings (macOS 15 deprecations)"
     echo "     (These are safe to ignore - app will work perfectly)"
 else
-    echo -e "  ${GREEN}✅${NC} Compiled without warnings"
+    echo -e "  ${GREEN}OK${NC} Compiled without warnings"
 fi
 
-# Verify executable was created
-if [ ! -f "$APP_DIR/Contents/MacOS/HollywoodSaver" ]; then
-    echo -e "${RED}❌ Error: Executable not created${NC}"
+if [ ! -f "$STAGE_DIR/Contents/MacOS/HollywoodSaver" ]; then
+    echo -e "${RED}Error: Executable not created. Live app was not touched.${NC}"
+    rm -rf "$STAGE_DIR"
     exit 1
 fi
 
-EXEC_SIZE=$(du -h "$APP_DIR/Contents/MacOS/HollywoodSaver" | awk '{print $1}')
-echo -e "  ${GREEN}✅${NC} Executable created (${EXEC_SIZE})"
+chmod +x "$STAGE_DIR/Contents/MacOS/HollywoodSaver"
+EXEC_SIZE=$(du -h "$STAGE_DIR/Contents/MacOS/HollywoodSaver" | awk '{print $1}')
+echo -e "  ${GREEN}OK${NC} Executable created (${EXEC_SIZE})"
 
-# Make executable
-chmod +x "$APP_DIR/Contents/MacOS/HollywoodSaver"
-
-# Copy ABOUT.md into the app bundle
 if [ -f "$SCRIPT_DIR/docs/ABOUT.md" ]; then
-    cp "$SCRIPT_DIR/docs/ABOUT.md" "$APP_DIR/Contents/Resources/"
-    echo -e "  ${GREEN}✅${NC} ABOUT.md included"
+    cp "$SCRIPT_DIR/docs/ABOUT.md" "$STAGE_DIR/Contents/Resources/"
+    echo -e "  ${GREEN}OK${NC} ABOUT.md included"
 fi
 
-# Calculate total app size
+LIVE_BIN="$APP_DIR/Contents/MacOS/HollywoodSaver"
+if [ -f "$LIVE_BIN" ]; then
+    OLDVER=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist" 2>/dev/null || echo "unknown")
+    BACKUP="$SCRIPT_DIR/HollywoodSaver-v${OLDVER}.app"
+    if [ "$BACKUP" = "$APP_DIR" ]; then
+        BACKUP="$SCRIPT_DIR/HollywoodSaver-v${OLDVER}-prev.app"
+    fi
+    echo ""
+    echo -e "${BLUE}Backing up live app to $(basename "$BACKUP")...${NC}"
+    rm -rf "$BACKUP"
+    cp -R "$APP_DIR" "$BACKUP"
+    echo -e "  ${GREEN}OK${NC} Saved previous build"
+else
+    echo -e "  ${YELLOW}WARN${NC}  No working HollywoodSaver.app to keep (empty/husk)"
+fi
+
+if pgrep -x HollywoodSaver >/dev/null 2>&1; then
+    echo "  Quitting running HollywoodSaver..."
+    killall HollywoodSaver 2>/dev/null || true
+    for _ in 1 2 3 4 5 6 7 8; do
+        pgrep -x HollywoodSaver >/dev/null 2>&1 || break
+        sleep 0.25
+    done
+fi
+
+rm -rf "$APP_DIR"
+mv "$STAGE_DIR" "$APP_DIR"
+
 APP_SIZE=$(du -sh "$APP_DIR" | awk '{print $1}')
 
 echo ""
-# --- Code Signing (auto-detects Developer ID cert) ---
 SIGN_ID=$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
 
 if [ -n "$SIGN_ID" ]; then
     echo ""
     echo -e "${BLUE}Code signing...${NC}"
     echo "  Identity: $SIGN_ID"
-
     codesign --deep --force --verify --verbose \
         --sign "$SIGN_ID" \
         --options runtime \
         "$APP_DIR" 2>&1 | grep -E "replacing|adding|signed" || true
-
     if codesign --verify --deep --strict "$APP_DIR" 2>/dev/null; then
-        echo -e "  ${GREEN}✅${NC} Signed with Developer ID"
+        echo -e "  ${GREEN}OK${NC} Signed with Developer ID"
     else
-        echo -e "  ${YELLOW}⚠️${NC}  Signing failed — app built but unsigned"
+        echo -e "  ${YELLOW}WARN${NC}  Signing failed — app built but unsigned"
     fi
 else
     echo ""
     echo -e "${BLUE}Code signing (ad-hoc with Hardened Runtime)...${NC}"
     codesign --deep --force --sign - --options runtime "$APP_DIR" 2>&1 || true
     if codesign --verify --deep --strict "$APP_DIR" 2>/dev/null; then
-        echo -e "  ${GREEN}✅${NC} Ad-hoc signed with Hardened Runtime"
+        echo -e "  ${GREEN}OK${NC} Ad-hoc signed with Hardened Runtime"
     else
-        echo -e "  ${YELLOW}⚠️${NC}  Ad-hoc signing failed — app built unsigned"
+        echo -e "  ${YELLOW}WARN${NC}  Ad-hoc signing failed — app built unsigned"
     fi
-    echo "     For public distribution: Xcode → Settings → Accounts → + Developer ID Application"
+    echo "     For public distribution: Xcode, Settings, Accounts, Developer ID Application"
 fi
 
 echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}🎖️  BUILD SUCCESSFUL! (v${VERSION})${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}BUILD SUCCESSFUL (v${VERSION})${NC}"
 echo ""
 echo -e "${BLUE}App:${NC}       $APP_DIR"
 echo -e "${BLUE}Size:${NC}      $APP_SIZE"
 echo -e "${BLUE}Built for:${NC} M1/M3/M4 (arm64)"
 echo ""
-echo -e "${GREEN}Rangers lead the way!${NC}"
-echo ""
 
-# Clear version check cache so app does a fresh check on launch
 defaults delete com.rangersmyth.hollywoodsaver lastVersionCheckDate 2>/dev/null || true
 defaults delete com.rangersmyth.hollywoodsaver cachedLatestVersion 2>/dev/null || true
 defaults delete com.rangersmyth.hollywoodsaver lastNotifiedVersion 2>/dev/null || true
 
-# Auto-launch after build
 bash "$SCRIPT_DIR/run.sh"

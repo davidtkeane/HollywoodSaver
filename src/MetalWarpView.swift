@@ -32,7 +32,7 @@ class MetalWarpView: NSView, ScreensaverContent, MTKViewDelegate {
         mtkView.delegate = self
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
-        mtkView.preferredFramesPerSecond = 60
+        mtkView.preferredFramesPerSecond = Prefs.batterySaverActive ? 30 : 60
         mtkView.autoresizingMask = [.width, .height]
         mtkView.isPaused = false
         mtkView.enableSetNeedsDisplay = false
@@ -164,6 +164,7 @@ class MetalWarpView: NSView, ScreensaverContent, MTKViewDelegate {
 
     func startPlayback() {
         startTime = CACurrentMediaTime()
+        mtkView?.preferredFramesPerSecond = Prefs.batterySaverActive ? 30 : 60
         mtkView?.isPaused = false
     }
 
