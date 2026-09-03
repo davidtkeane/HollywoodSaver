@@ -2,7 +2,7 @@
 
 All notable changes to HollywoodSaver are documented here.
 
-## [Unreleased] - 2026-09-03 — Last Played, Battery Saver, Safer Builds
+## [Unreleased] - 2026-09-03 — Last Played, Battery Saver, Safer Builds, Recap
 
 ### Added
 - **Last Played** — when nothing is running, a one-click item sits above Play and restarts the last clip/effect on the last screen(s). Option-click is still ambient. Hidden while Now Playing is up. Shows Last Played (missing) if the file is gone.
@@ -12,6 +12,7 @@ All notable changes to HollywoodSaver are documented here.
 - **Stay-open Settings** — Sound, Loop, Sequential Playlist, Battery Saver, Auto Play, Launch at Login, Dock, and Desktop Shortcut use ToggleMenuItemView, so ticking them does not dismiss the menu. Same for the Now Playing sound toggle while a video is playing. Play/Displays still close the menu (screensaver sits above the bar).
 - **Battery Saver is real** — Prefs.batterySaverActive (pref AND macOS Low Power Mode) now throttles Metal, Matrix, and GIF to 30fps, not only Starfield. Ticking the setting updates a running Metal view.
 - **build.sh stages first** — compiles into .hs-build.app. The live HollywoodSaver.app is not deleted until the new binary exists. A working live app is copied to HollywoodSaver-vX.Y.Z.app (same pattern as v5.0.1 / v5.0.2). Then quit, swap, sign, launch. Compile failure leaves the live app untouched. swiftc non-zero exit is treated as failure, not only a grep for error:.
+- **build.sh recap** — after launch, prints HollywoodSaver vVERSION, the git short hash, and the Unreleased changelog block so you can see what this binary contains.
 
 ---
 

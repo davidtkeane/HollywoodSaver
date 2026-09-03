@@ -255,3 +255,27 @@ defaults delete com.rangersmyth.hollywoodsaver cachedLatestVersion 2>/dev/null |
 defaults delete com.rangersmyth.hollywoodsaver lastNotifiedVersion 2>/dev/null || true
 
 bash "$SCRIPT_DIR/run.sh"
+
+GIT_SHA=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+echo ""
+echo -e "${GREEN}--------------------------------------${NC}"
+echo -e "${GREEN}  HollywoodSaver v${VERSION}  (${GIT_SHA})${NC}"
+echo -e "${GREEN}--------------------------------------${NC}"
+if [ -f "$SCRIPT_DIR/docs/CHANGELOG.md" ]; then
+    echo ""
+    echo -e "${BLUE}What is in this build:${NC}"
+    echo ""
+    awk '
+        /^## \[/ {
+            if (seen) exit
+            seen = 1
+            print
+            next
+        }
+        seen {
+            if ($0 == "---") exit
+            print
+        }
+    ' "$SCRIPT_DIR/docs/CHANGELOG.md"
+    echo ""
+fi

@@ -67,7 +67,7 @@ cd HollywoodSaver
 bash build.sh
 ```
 
-`bash build.sh` compiles the app, generates the icon, quits a running copy, and launches the new binary. No need to run `run.sh` separately.
+`bash build.sh` compiles the app, generates the icon, quits a running copy, and launches the new binary. After launch it prints the version, git hash, and Unreleased changelog. No need to run `run.sh` separately.
 
 ### Where is the icon?
 
