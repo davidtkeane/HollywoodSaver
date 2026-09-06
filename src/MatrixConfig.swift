@@ -37,6 +37,7 @@ enum MatrixSpeed: String, CaseIterable {
 }
 
 enum MatrixCharacterSet: String, CaseIterable {
+    case movie = "Movie"
     case katakana = "Katakana"
     case latin = "Latin"
     case numbers = "Numbers"

@@ -2,11 +2,12 @@
 
 All notable changes to HollywoodSaver are documented here.
 
-## [Unreleased] - 2026-09-06 — Last Played, Battery Saver, Safer Builds, Matrix Polish
+## [Unreleased] - 2026-09-06 — Last Played, Battery Saver, Matrix Movie Set
 
 ### Added
 - **Last Played** — when nothing is running, a one-click item sits above Play and restarts the last clip/effect on the last screen(s). Option-click is still ambient. Hidden while Now Playing is up. Shows Last Played (missing) if the file is gone.
 - **Open Media Folders** — Settings submenu opens Videos, GIFs, Photos, Web, or the app folder in Finder (creates the folder if missing).
+- **Matrix Movie character set** — Settings → Matrix Rain → Characters adds Movie: halfwidth katakana + digits/Latin, drawn mirrored like the film. Katakana / Latin / Numbers / Mixed stay as they were.
 
 ### Changed
 - **Stay-open Settings** — Sound, Loop, Sequential Playlist, Battery Saver, Auto Play, Launch at Login, Dock, and Desktop Shortcut use ToggleMenuItemView, so ticking them does not dismiss the menu. Same for the Now Playing sound toggle while a video is playing. Play/Displays still close the menu (screensaver sits above the bar).

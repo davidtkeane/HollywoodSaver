@@ -102,6 +102,12 @@ class MatrixRainView: NSView, ScreensaverContent {
     func buildCharacterPool() -> [Character] {
         var pool: [Character] = []
         switch charSet {
+        case .movie:
+            // Film-style: halfwidth katakana + digits + a little Latin (Whiteley set)
+            for scalar in 0xFF66...0xFF9D {
+                if let u = Unicode.Scalar(scalar) { pool.append(Character(u)) }
+            }
+            for c in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" { pool.append(c) }
         case .katakana:
             for scalar in 0x30A0...0x30FF {
                 if let u = Unicode.Scalar(scalar) { pool.append(Character(u)) }
@@ -312,9 +318,20 @@ class MatrixRainView: NSView, ScreensaverContent {
                 ]
                 let attrStr = NSAttributedString(string: char, attributes: attrs)
                 let line = CTLineCreateWithAttributedString(attrStr)
+                let lineWidth = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
 
-                context.textPosition = CGPoint(x: x, y: y)
-                CTLineDraw(line, context)
+                if charSet == .movie {
+                    // Mirror like the film "inside the code" look
+                    context.saveGState()
+                    context.translateBy(x: x + max(lineWidth, column.pointSize * 0.7), y: y)
+                    context.scaleBy(x: -1, y: 1)
+                    context.textPosition = .zero
+                    CTLineDraw(line, context)
+                    context.restoreGState()
+                } else {
+                    context.textPosition = CGPoint(x: x, y: y)
+                    CTLineDraw(line, context)
+                }
             }
         }
     }
