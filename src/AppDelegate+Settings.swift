@@ -112,31 +112,52 @@ extension AppDelegate {
     @objc func setMatrixColor(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.matrixColorTheme = value
+        applyMatrixPrefsToRunningViews()
     }
 
     @objc func setMatrixSpeed(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.matrixSpeed = value
+        applyMatrixPrefsToRunningViews()
     }
 
     @objc func setMatrixCharSet(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.matrixCharacterSet = value
+        applyMatrixPrefsToRunningViews()
     }
 
     @objc func setMatrixDensity(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.matrixDensity = value
+        applyMatrixPrefsToRunningViews()
     }
 
     @objc func setMatrixFontSize(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.matrixFontSize = value
+        applyMatrixPrefsToRunningViews()
     }
 
     @objc func setMatrixTrailLength(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String else { return }
         Prefs.matrixTrailLength = value
+        applyMatrixPrefsToRunningViews()
+    }
+
+    func applyMatrixPrefsToRunningViews() {
+        for cv in contentViews {
+            (cv as? MatrixRainView)?.applyPrefsFromDefaults()
+        }
+        for cv in rainOverlayViews {
+            (cv as? MatrixRainView)?.applyPrefsFromDefaults()
+        }
+        for cv in rainBehindViews {
+            (cv as? MatrixRainView)?.applyPrefsFromDefaults()
+        }
+        for window in lockScreenWindows {
+            (window.contentView as? LockScreenView)?.matrixRainView?.applyPrefsFromDefaults()
+        }
     }
 
     // MARK: - Starfield Warp Settings

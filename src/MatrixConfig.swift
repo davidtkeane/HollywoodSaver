@@ -77,10 +77,22 @@ enum MatrixTrailLength: String, CaseIterable {
     case long = "Long"
 
     var fadeSteps: Int {
+        // ~3–4× the old 8/16/30 so Long reads like film streaks
         switch self {
-        case .short:  return 8
-        case .medium: return 16
-        case .long:   return 30
+        case .short:  return 28
+        case .medium: return 56
+        case .long:   return 100
+        }
+    }
+}
+
+extension MatrixFontSize {
+    /// Base pt for mixed per-stream sizes (Settings Size scales the mix).
+    var mixedSizeRange: ClosedRange<CGFloat> {
+        switch self {
+        case .small:  return 8...14
+        case .medium: return 11...20
+        case .large:  return 14...28
         }
     }
 }
